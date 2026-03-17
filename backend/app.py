@@ -47,6 +47,8 @@ def confidence(req: ConfidenceRequest):
         )
         return ConfidenceResponse(**result)
     except Exception as e:
+        # Log the error so we can inspect it in deployment logs (e.g. Vercel).
+        print("LLM error in /confidence endpoint:", e)
         try:
             return ConfidenceResponse(
                 verdict="uncertain",
