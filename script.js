@@ -1,5 +1,6 @@
 const DATA_URL = "greenwashing_claim_history.json";
 const VALIDATED_MAPPINGS_URL = "8B model/validated_mappings.jsonl";
+const FLAGGED_MAPPINGS_URL = "8B model/flagged_mappings.jsonl";
 // Use localhost for local dev; in production, call the deployed backend on Vercel.
 const BACKEND_BASE_URL =
   window.BACKEND_BASE_URL ||
@@ -20,13 +21,19 @@ async function loadClaimsData() {
 
     const claims = json.claims || {};
 
-    // Load validated subclaim→superclaim mappings (ids + superclaim text).
-    const mappingsRes = await fetch(VALIDATED_MAPPINGS_URL);
-    if (!mappingsRes.ok) throw new Error(`HTTP ${mappingsRes.status}`);
-    const mappingsText = await mappingsRes.text();
+    // Load validated and flagged subclaim→superclaim mappings (ids + superclaim text).
+    const validatedRes = await fetch(VALIDATED_MAPPINGS_URL);
+    if (!validatedRes.ok) throw new Error(`HTTP ${validatedRes.status}`);
+    const validatedText = await validatedRes.text();
+
+    const flaggedRes = await fetch(FLAGGED_MAPPINGS_URL);
+    if (!flaggedRes.ok) throw new Error(`HTTP ${flaggedRes.status}`);
+    const flaggedText = await flaggedRes.text();
 
     const superclaimBySubclaim = new Map();
-    mappingsText
+
+    function ingestMappings(rawText, { preferIfMissing = false } = {}) {
+      rawText
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
@@ -36,7 +43,7 @@ async function loadClaimsData() {
           if (!rec.subclaim_id || !rec.superclaim_id) return;
           // Prefer mappings that have an explicit superclaim_text.
           const existing = superclaimBySubclaim.get(rec.subclaim_id);
-          if (existing && existing.superclaimText) return;
+          if (existing && existing.superclaimText && !preferIfMissing) return;
           superclaimBySubclaim.set(rec.subclaim_id, {
             superclaimId: rec.superclaim_id,
             superclaimText: rec.superclaim_text || "",
@@ -45,6 +52,11 @@ async function loadClaimsData() {
           // Ignore malformed lines.
         }
       });
+    }
+
+    // Validated mappings win; flagged fill in any gaps.
+    ingestMappings(validatedText);
+    ingestMappings(flaggedText, { preferIfMissing: true });
 
     const snippets = [];
 
