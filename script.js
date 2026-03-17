@@ -60,13 +60,55 @@ function splitIntoSentences(text) {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (!cleaned) return [];
 
-  const regex = /[^.!?]+[.!?]+/g;
-  const matches = cleaned.match(regex) || [];
+  // Simple abbreviation handling so things like "U.S." are not split as sentences.
+  const abbreviations = new Set([
+    "U.S.",
+    "U.K.",
+    "U.N.",
+    "Mr.",
+    "Ms.",
+    "Mrs.",
+    "Dr.",
+    "Prof.",
+    "Inc.",
+    "Ltd.",
+    "Co.",
+    "Jr.",
+    "Sr.",
+    "e.g.",
+    "i.e.",
+  ]);
 
-  const remainder = cleaned.slice(matches.join("").length).trim();
-  if (remainder) matches.push(remainder);
+  const sentences = [];
+  let startIdx = 0;
 
-  return matches.map((s) => s.trim()).filter(Boolean);
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (ch === "." || ch === "!" || ch === "?") {
+      // Look backwards to see if this punctuation ends a known abbreviation.
+      let wordStart = i;
+      while (wordStart > 0 && cleaned[wordStart - 1] !== " ") {
+        wordStart--;
+      }
+      const candidateWord = cleaned.slice(wordStart, i + 1);
+      const isAbbrev = abbreviations.has(candidateWord);
+
+      // Also require that this is likely an end-of-sentence: next char is space or end of string.
+      const nextChar = cleaned[i + 1] || "";
+      const likelyBoundary = !nextChar || nextChar === " ";
+
+      if (!isAbbrev && likelyBoundary) {
+        const sentence = cleaned.slice(startIdx, i + 1).trim();
+        if (sentence) sentences.push(sentence);
+        startIdx = i + 1;
+      }
+    }
+  }
+
+  const remainder = cleaned.slice(startIdx).trim();
+  if (remainder) sentences.push(remainder);
+
+  return sentences;
 }
 
 function computeMatchConfidence(sentenceLower, snippetLower) {
@@ -127,25 +169,31 @@ function findBestMatchesForSentence(sentence) {
 
   const lowerSentence = sentence.toLowerCase();
 
-  const candidates = flattenedSnippets.filter((s) => {
-    const confidence = computeMatchConfidence(lowerSentence, s.snippetLower);
-    return confidence >= 0.6;
-  }).map((s) => ({
-    ...s,
-    mappingConfidence: computeMatchConfidence(lowerSentence, s.snippetLower),
-  }));
+  const candidates = flattenedSnippets
+    .filter((s) => {
+      const confidence = computeMatchConfidence(lowerSentence, s.snippetLower);
+      return confidence >= 0.6;
+    })
+    .map((s) => ({
+      ...s,
+      mappingConfidence: computeMatchConfidence(
+        lowerSentence,
+        s.snippetLower
+      ),
+    }));
 
-  const dedupByKey = new Map();
+  // For each sentence, ensure at most one match per subclaim.
+  const bestBySubclaim = new Map();
 
   for (const c of candidates) {
-    const key = `${c.superclaimId}|${c.subclaimId}`;
-    const existing = dedupByKey.get(key);
+    const key = c.subclaimId;
+    const existing = bestBySubclaim.get(key);
     if (!existing || c.mappingConfidence > existing.mappingConfidence) {
-      dedupByKey.set(key, c);
+      bestBySubclaim.set(key, c);
     }
   }
 
-  const dedup = Array.from(dedupByKey.values()).sort(
+  const dedup = Array.from(bestBySubclaim.values()).sort(
     (a, b) => b.mappingConfidence - a.mappingConfidence
   );
 
