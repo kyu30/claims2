@@ -36,9 +36,7 @@ async function loadClaimsData() {
 
         const subclaimFromJson = claims[subclaimId];
         const subclaimText =
-          subclaimFromJson && typeof subclaimFromJson.current_text === "string"
-            ? subclaimFromJson.current_text
-            : "";
+          (subclaimFromJson && subclaimFromJson.current_text) || "";
 
         snippets.push({
           sentenceSnippet: entry.source_snippet,
@@ -132,8 +130,8 @@ function formatConfidence(score) {
   return score.toFixed(2);
 }
 
-async function fetchLlMConfidence({ subclaimId, subclaimText, superclaimId, superclaimText }) {
-  const key = `${subclaimId}|${superclaimId}|${subclaimText}|${superclaimText}`;
+async function fetchLlMConfidence({ subclaimId, sentenceSnippet, superclaimId, superclaimText }) {
+  const key = `${subclaimId}|${superclaimId}|${sentenceSnippet}|${superclaimText}`;
   if (confidenceCache.has(key)) return confidenceCache.get(key);
 
   const p = (async () => {
@@ -143,7 +141,7 @@ async function fetchLlMConfidence({ subclaimId, subclaimText, superclaimId, supe
       body: JSON.stringify({
         subclaim_id: subclaimId,
         superclaim_id: superclaimId,
-        subclaim_text: subclaimText,
+        subclaim_text: sentenceSnippet,
         superclaim_text: superclaimText,
       }),
     });
@@ -345,7 +343,7 @@ async function hydrateConfidenceScores(container) {
     try {
       const result = await fetchLlMConfidence({
         subclaimId,
-        subclaimText,
+        sentenceSnippet: subclaimText,
         superclaimId,
         superclaimText,
       });
