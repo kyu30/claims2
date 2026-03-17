@@ -34,12 +34,17 @@ async function loadClaimsData() {
           ? rawSubIdText
           : `NC_${rawSubIdText.replace(/^(NC_|SC_)/, "")}`;
 
+        const subclaimFromJson = claims[subclaimId];
+        const subclaimText =
+          (subclaimFromJson && subclaimFromJson.current_text) || "";
+
         snippets.push({
           sentenceSnippet: entry.source_snippet,
           snippetLower: entry.source_snippet.toLowerCase(),
           superclaimText: superText,
           superclaimId,
           subclaimId,
+          subclaimText,
         });
       });
     }
@@ -234,7 +239,7 @@ function renderResults(sentencesWithMatches) {
 
       tdSub.innerHTML = `
         <div class="claim-label">Subclaim <span class="claim-id">(${m.subclaimId})</span></div>
-        <div class="claim-text">${m.sentenceSnippet}</div>
+        <div class="claim-text">${m.subclaimText || m.sentenceSnippet}</div>
       `;
 
       tdSuper.innerHTML = `
@@ -246,7 +251,7 @@ function renderResults(sentencesWithMatches) {
             class="confidence-score"
             data-subclaim-id="${m.subclaimId}"
             data-superclaim-id="${m.superclaimId}"
-            data-subclaim-text="${escapeHtmlAttr(m.sentenceSnippet)}"
+            data-subclaim-text="${escapeHtmlAttr(m.subclaimText || m.sentenceSnippet)}"
             data-superclaim-text="${escapeHtmlAttr(m.superclaimText)}"
           >
             …
