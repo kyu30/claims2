@@ -36,7 +36,9 @@ async function loadClaimsData() {
 
         const subclaimFromJson = claims[subclaimId];
         const subclaimText =
-          (subclaimFromJson && subclaimFromJson.current_text) || "";
+          subclaimFromJson && typeof subclaimFromJson.current_text === "string"
+            ? subclaimFromJson.current_text
+            : "";
 
         snippets.push({
           sentenceSnippet: entry.source_snippet,
@@ -130,8 +132,8 @@ function formatConfidence(score) {
   return score.toFixed(2);
 }
 
-async function fetchLlMConfidence({ subclaimId, sentenceSnippet, superclaimId, superclaimText }) {
-  const key = `${subclaimId}|${superclaimId}|${sentenceSnippet}|${superclaimText}`;
+async function fetchLlMConfidence({ subclaimId, subclaimText, superclaimId, superclaimText }) {
+  const key = `${subclaimId}|${superclaimId}|${subclaimText}|${superclaimText}`;
   if (confidenceCache.has(key)) return confidenceCache.get(key);
 
   const p = (async () => {
@@ -141,7 +143,7 @@ async function fetchLlMConfidence({ subclaimId, sentenceSnippet, superclaimId, s
       body: JSON.stringify({
         subclaim_id: subclaimId,
         superclaim_id: superclaimId,
-        subclaim_text: sentenceSnippet,
+        subclaim_text: subclaimText,
         superclaim_text: superclaimText,
       }),
     });
@@ -287,7 +289,7 @@ function renderResults(sentencesWithMatches) {
 
       tdSub.innerHTML = `
         <div class="claim-label">Subclaim <span class="claim-id">(${m.subclaimId})</span></div>
-        <div class="claim-text">${m.subclaimText || m.sentenceSnippet}</div>
+        <div class="claim-text">${m.subclaimText}</div>
       `;
 
       tdSuper.innerHTML = `
@@ -299,7 +301,7 @@ function renderResults(sentencesWithMatches) {
             class="confidence-score"
             data-subclaim-id="${m.subclaimId}"
             data-superclaim-id="${m.superclaimId}"
-            data-subclaim-text="${escapeHtmlAttr(m.subclaimText || m.sentenceSnippet)}"
+            data-subclaim-text="${escapeHtmlAttr(m.subclaimText)}"
             data-superclaim-text="${escapeHtmlAttr(m.superclaimText)}"
           >
             …
@@ -343,7 +345,7 @@ async function hydrateConfidenceScores(container) {
     try {
       const result = await fetchLlMConfidence({
         subclaimId,
-        sentenceSnippet: subclaimText,
+        subclaimText,
         superclaimId,
         superclaimText,
       });
