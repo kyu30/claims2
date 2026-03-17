@@ -4,7 +4,7 @@ const BACKEND_BASE_URL =
   window.BACKEND_BASE_URL ||
   (location.hostname === "localhost"
     ? "http://localhost:8001"
-    : "https://claims-backend-sigma.vercel.app/confidence");
+    : "https://claims-backend-sigma.vercel.app");
 
 let flattenedSnippets = null;
 let dataLoadError = null;
