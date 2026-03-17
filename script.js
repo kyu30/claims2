@@ -1,4 +1,5 @@
 const DATA_URL = "greenwashing_claim_history.json";
+const VALIDATED_MAPPINGS_URL = "8B model/validated_mappings.jsonl";
 // Use localhost for local dev; in production, call the deployed backend on Vercel.
 const BACKEND_BASE_URL =
   window.BACKEND_BASE_URL ||
@@ -12,11 +13,39 @@ const confidenceCache = new Map();
 
 async function loadClaimsData() {
   try {
+    // Load subclaim definitions (ids + current_text + history).
     const res = await fetch(DATA_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
 
     const claims = json.claims || {};
+
+    // Load validated subclaim→superclaim mappings (ids + superclaim text).
+    const mappingsRes = await fetch(VALIDATED_MAPPINGS_URL);
+    if (!mappingsRes.ok) throw new Error(`HTTP ${mappingsRes.status}`);
+    const mappingsText = await mappingsRes.text();
+
+    const superclaimBySubclaim = new Map();
+    mappingsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        try {
+          const rec = JSON.parse(line);
+          if (!rec.subclaim_id || !rec.superclaim_id) return;
+          // Prefer mappings that have an explicit superclaim_text.
+          const existing = superclaimBySubclaim.get(rec.subclaim_id);
+          if (existing && existing.superclaimText) return;
+          superclaimBySubclaim.set(rec.subclaim_id, {
+            superclaimId: rec.superclaim_id,
+            superclaimText: rec.superclaim_text || "",
+          });
+        } catch {
+          // Ignore malformed lines.
+        }
+      });
+
     const snippets = [];
 
     // Each entry in `claims` represents a *subclaim* (e.g., "NC_46").
@@ -27,11 +56,11 @@ async function loadClaimsData() {
         : `NC_${claimId.replace(/^(NC_|SC_)/, "")}`;
       const subclaimText = claimObj.current_text || "";
 
-      const history = Array.isArray(claimObj.history) ? claimObj.history : [];
+      const mapping = superclaimBySubclaim.get(subclaimId);
+      if (!mapping) continue; // If we don't know its superclaim, skip for this UI.
 
-      // Derive a synthetic superclaim id from the numeric portion so existing UI keeps working.
-      const superclaimId = `SC_${subclaimId.replace(/^(NC_|SC_)/, "")}`;
-      const superclaimText = claimObj.current_text || "";
+      const { superclaimId, superclaimText } = mapping;
+      const history = Array.isArray(claimObj.history) ? claimObj.history : [];
 
       history.forEach((entry) => {
         if (!entry || !entry.source_snippet) return;
