@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Claim Mapping MVP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1>Article to Claim Mapper</h1>
+      <p>
+        Paste an article below. For each sentence, this tool will look up matching
+        subclaims and their superclaims from <code>greenwashing_claim_history.json</code>.
+      </p>
+    </header>
+
+    <section class="input-section">
+      <label for="article-input" class="field-label">Article text</label>
+      <textarea id="article-input" class="text-input" rows="10" placeholder="Paste article text here..."></textarea>
+
+      <div class="controls">
+        <button id="analyze-btn" class="primary-btn">Analyze sentences</button>
+        <span id="status" class="status-text"></span>
+      </div>
+    </section>
+
+    <section class="results-section">
+      <h2>Sentence ↔ Claim mappings</h2>
+      <div id="results-container" class="results-container">
+        <p class="placeholder">No results yet. Paste an article and click “Analyze sentences”.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
