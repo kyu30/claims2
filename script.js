@@ -19,29 +19,27 @@ async function loadClaimsData() {
     const claims = json.claims || {};
     const snippets = [];
 
+    // Each entry in `claims` represents a *subclaim* (e.g., "NC_46").
+    // Its `history` contains all source snippets that have been mapped to that subclaim.
     for (const [claimId, claimObj] of Object.entries(claims)) {
-      const superText = claimObj.current_text || "";
-      const history = Array.isArray(claimObj.history) ? claimObj.history : [];
-      const superclaimId = claimId.startsWith("SC_")
+      const subclaimId = claimId.startsWith("NC_")
         ? claimId
-        : `SC_${claimId.replace(/^(NC_|SC_)/, "")}`;
+        : `NC_${claimId.replace(/^(NC_|SC_)/, "")}`;
+      const subclaimText = claimObj.current_text || "";
 
-      history.forEach((entry, idx) => {
+      const history = Array.isArray(claimObj.history) ? claimObj.history : [];
+
+      // Derive a synthetic superclaim id from the numeric portion so existing UI keeps working.
+      const superclaimId = `SC_${subclaimId.replace(/^(NC_|SC_)/, "")}`;
+      const superclaimText = claimObj.current_text || "";
+
+      history.forEach((entry) => {
         if (!entry || !entry.source_snippet) return;
-        const rawSubId = entry.source_article_id ?? idx;
-        const rawSubIdText = String(rawSubId);
-        const subclaimId = rawSubIdText.startsWith("NC_")
-          ? rawSubIdText
-          : `NC_${rawSubIdText.replace(/^(NC_|SC_)/, "")}`;
-
-        const subclaimFromJson = claims[subclaimId];
-        const subclaimText =
-          (subclaimFromJson && subclaimFromJson.current_text) || "";
 
         snippets.push({
           sentenceSnippet: entry.source_snippet,
           snippetLower: entry.source_snippet.toLowerCase(),
-          superclaimText: superText,
+          superclaimText,
           superclaimId,
           subclaimId,
           subclaimText,
