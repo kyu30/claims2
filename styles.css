@@ -278,6 +278,72 @@ body {
   color: var(--text-muted);
 }
 
+.collapse-block {
+  margin-top: 8px;
+}
+
+.collapse-meta {
+  display: block;
+  line-height: 1.45;
+}
+
+.collapse-badge {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fef3c7;
+  background: rgba(234, 179, 8, 0.2);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+}
+
+.collapse-badge-quiet {
+  color: var(--text-muted);
+  background: rgba(51, 65, 85, 0.5);
+  border-color: rgba(100, 116, 139, 0.6);
+  font-weight: 500;
+}
+
+.collapse-topic-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.collapse-peers {
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.collapse-peers .claim-id {
+  margin-right: 4px;
+}
+
+.collapse-more {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.collapse-meta code {
+  font-size: 10px;
+  color: #a5b4fc;
+}
+
+.hierarchy-confidence {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.hierarchy-confidence strong {
+  color: #a7f3d0;
+  font-weight: 600;
+}
+
 .claim-id {
   font-weight: 600;
   color: #d1d5db;

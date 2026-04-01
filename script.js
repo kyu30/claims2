@@ -1,16 +1,14 @@
 const DATA_URL = "greenwashing_claim_history.json";
 const VALIDATED_MAPPINGS_URL = "8B model/validated_mappings.jsonl";
 const FLAGGED_MAPPINGS_URL = "8B model/flagged_mappings.jsonl";
-// Use localhost for local dev; in production, call the deployed backend on Vercel.
-const BACKEND_BASE_URL =
-  window.BACKEND_BASE_URL ||
-  (location.hostname === "localhost"
-    ? "http://localhost:8001"
-    : "https://claims-backend-sigma.vercel.app");
+const COLLAPSE_MAP_URL = "subclaim_bertopic_collapse.json";
 
 let flattenedSnippets = null;
+/** @type {string | null} */
+let artifactBundleVersion = null;
+/** @type {Map<string, { topicId: number, collapseFlag: boolean, collapseWith: string[], topicLabel?: string, hierarchyConfidence?: number }> | null} */
+let collapseBySubclaim = null;
 let dataLoadError = null;
-const confidenceCache = new Map();
 
 async function loadClaimsData() {
   try {
@@ -18,6 +16,39 @@ async function loadClaimsData() {
     const res = await fetch(DATA_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
+
+    // BERTopic collapse flags (offline artifact; optional).
+    collapseBySubclaim = new Map();
+    try {
+      const collapseRes = await fetch(COLLAPSE_MAP_URL);
+      if (collapseRes.ok) {
+        const collapseJson = await collapseRes.json();
+        if (typeof collapseJson.claims_bundle_version === "string") {
+          artifactBundleVersion = collapseJson.claims_bundle_version;
+        }
+        const sub = collapseJson.subclaims || {};
+        for (const [sid, row] of Object.entries(sub)) {
+          if (!row || typeof row !== "object") continue;
+          const collapseWith = Array.isArray(row.collapse_with)
+            ? row.collapse_with.map(String)
+            : [];
+          const hc = row.hierarchy_confidence;
+          const entry = {
+            topicId: Number(row.topic_id),
+            collapseFlag: Boolean(row.collapse_flag),
+            collapseWith: collapseWith,
+            topicLabel:
+              typeof row.topic_label === "string" ? row.topic_label : undefined,
+          };
+          if (typeof hc === "number" && Number.isFinite(hc)) {
+            entry.hierarchyConfidence = hc;
+          }
+          collapseBySubclaim.set(sid, entry);
+        }
+      }
+    } catch {
+      // Missing or invalid collapse file: UI continues without flags.
+    }
 
     const claims = json.claims || {};
 
@@ -151,8 +182,7 @@ function splitIntoSentences(text) {
 }
 
 function computeMatchConfidence(sentenceLower, snippetLower) {
-  // NOTE: This keeps the *mapping selection* behavior as-is.
-  // The displayed confidence score is computed live by the backend LLM call.
+  // NOTE: Keeps *mapping selection* behavior (local overlap / LCS).
   if (!sentenceLower || !snippetLower) return 0;
   if (sentenceLower === snippetLower) return 1;
   if (snippetLower.includes(sentenceLower) || sentenceLower.includes(snippetLower)) return 1;
@@ -164,43 +194,80 @@ function computeMatchConfidence(sentenceLower, snippetLower) {
   return intersection.length / minLen;
 }
 
-function formatConfidence(score) {
-  if (!Number.isFinite(score)) return "N/A";
-  return score.toFixed(2);
+function formatHierarchyLine(row) {
+  if (
+    !row ||
+    typeof row.hierarchyConfidence !== "number" ||
+    !Number.isFinite(row.hierarchyConfidence)
+  ) {
+    return { html: "", titlePart: "" };
+  }
+  const v = row.hierarchyConfidence;
+  const html = `<div class="hierarchy-confidence">Offline semantic confidence (subclaim↔superclaim): <strong>${v.toFixed(2)}</strong></div>`;
+  return {
+    html,
+    titlePart: `Offline embedding similarity: ${v.toFixed(2)}`,
+  };
 }
 
-async function fetchLlMConfidence({ subclaimId, sentenceSnippet, superclaimId, superclaimText }) {
-  const key = `${subclaimId}|${superclaimId}|${sentenceSnippet}|${superclaimText}`;
-  if (confidenceCache.has(key)) return confidenceCache.get(key);
-
-  const p = (async () => {
-    const res = await fetch(`${BACKEND_BASE_URL}/confidence`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subclaim_id: subclaimId,
-        superclaim_id: superclaimId,
-        subclaim_text: sentenceSnippet,
-        superclaim_text: superclaimText,
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Backend error ${res.status}: ${text}`);
-    }
-
-    const json = await res.json();
-    const confidence = Number(json.confidence);
+function formatCollapseMeta(subclaimId) {
+  if (!collapseBySubclaim || !collapseBySubclaim.size) {
     return {
-      verdict: json.verdict,
-      confidence: Number.isFinite(confidence) ? confidence : 0,
-      reason: typeof json.reason === "string" ? json.reason : "",
+      html: `<span class="collapse-meta">No artifact loaded (run <code>python scripts/build_subclaim_collapse_bertopic.py</code>).</span>`,
+      title: "Generate subclaim_bertopic_collapse.json",
     };
-  })();
-
-  confidenceCache.set(key, p);
-  return p;
+  }
+  const row = collapseBySubclaim.get(subclaimId);
+  if (!row) {
+    return {
+      html: `<span class="collapse-meta">No BERTopic row for this subclaim.</span>`,
+      title: "",
+    };
+  }
+  const hier = formatHierarchyLine(row);
+  const peers = row.collapseWith || [];
+  const label = row.topicLabel ? escapeHtml(String(row.topicLabel)) : "";
+  if (!row.collapseFlag || peers.length === 0) {
+    const tid = Number.isFinite(row.topicId) ? row.topicId : "";
+    const labelBit = label
+      ? `<div class="collapse-topic-label">${label}</div>`
+      : "";
+    const titleBits = [hier.titlePart, label ? `BERTopic: ${row.topicLabel}` : "", "Singleton or outlier — not flagged for merge"].filter(Boolean);
+    return {
+      html: `
+        <div class="collapse-meta">
+          ${hier.html}
+          <span class="collapse-badge collapse-badge-quiet">Unique topic${tid !== "" ? ` (${tid})` : ""}</span>
+          ${labelBit}
+        </div>
+      `,
+      title: titleBits.join(" · "),
+    };
+  }
+  const peerList = peers
+    .slice(0, 8)
+    .map((id) => `<span class="claim-id">${escapeHtml(id)}</span>`)
+    .join(", ");
+  const more =
+    peers.length > 8 ? ` <span class="collapse-more">+${peers.length - 8} more</span>` : "";
+  const labelBlock = label
+    ? `<div class="collapse-topic-label">${label}</div>`
+    : "";
+  const titleBits = [
+    hier.titlePart,
+    `Same BERTopic cluster as: ${peers.join(", ")}`,
+  ].filter(Boolean);
+  return {
+    html: `
+      <div class="collapse-meta">
+        ${hier.html}
+        <span class="collapse-badge">May collapse with</span>
+        ${labelBlock}
+        <div class="collapse-peers">${peerList}${more}</div>
+      </div>
+    `,
+    title: titleBits.join(" · "),
+  };
 }
 
 function findBestMatchesForSentence(sentence) {
@@ -329,20 +396,12 @@ function renderResults(sentencesWithMatches) {
         <div class="claim-text">${m.subclaimText}</div>
       `;
 
+      const collapse = formatCollapseMeta(m.subclaimId);
       tdSuper.innerHTML = `
         <div class="claim-label">Superclaim <span class="claim-id">(${m.superclaimId})</span></div>
         <div class="claim-text">${m.superclaimText}</div>
-        <div class="claim-meta">
-          Confidence score:
-          <span
-            class="confidence-score"
-            data-subclaim-id="${m.subclaimId}"
-            data-superclaim-id="${m.superclaimId}"
-            data-subclaim-text="${escapeHtmlAttr(m.subclaimText)}"
-            data-superclaim-text="${escapeHtmlAttr(m.superclaimText)}"
-          >
-            …
-          </span>
+        <div class="claim-meta collapse-block" title="${escapeHtmlAttr(collapse.title)}">
+          ${collapse.html}
         </div>
       `;
 
@@ -355,11 +414,6 @@ function renderResults(sentencesWithMatches) {
   table.appendChild(thead);
   table.appendChild(tbody);
   container.appendChild(table);
-
-  // Populate confidence scores live via backend LLM calls.
-  hydrateConfidenceScores(container).catch((e) => {
-    console.error("Failed to hydrate confidence scores:", e);
-  });
 }
 
 function escapeHtmlAttr(s) {
@@ -371,30 +425,11 @@ function escapeHtmlAttr(s) {
     .replaceAll(">", "&gt;");
 }
 
-async function hydrateConfidenceScores(container) {
-  const nodes = Array.from(container.querySelectorAll(".confidence-score"));
-  await Promise.all(nodes.map(async (node) => {
-    const subclaimId = node.dataset.subclaimId;
-    const superclaimId = node.dataset.superclaimId;
-    const subclaimText = node.dataset.subclaimText;
-    const superclaimText = node.dataset.superclaimText;
-
-    try {
-      const result = await fetchLlMConfidence({
-        subclaimId,
-        sentenceSnippet: subclaimText,
-        superclaimId,
-        superclaimText,
-      });
-      node.textContent = formatConfidence(result.confidence);
-      const verdict = result.verdict ? String(result.verdict) : "unknown";
-      const reason = result.reason ? String(result.reason) : "No reason provided";
-      node.title = `LLM-scored confidence (gpt-5-mini)\nverdict: ${verdict}\nreason: ${reason}`;
-    } catch (e) {
-      node.textContent = formatConfidence(0);
-      node.title = String(e && e.message ? e.message : e);
-    }
-  }));
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 async function handleAnalyzeClick() {
@@ -432,7 +467,11 @@ async function handleAnalyzeClick() {
   }));
 
   renderResults(withMatches);
-  statusEl.textContent = `Analyzed ${sentences.length} sentence${sentences.length === 1 ? "" : "s"}.`;
+  const bundleBit =
+    artifactBundleVersion != null
+      ? ` · artifact ${artifactBundleVersion}`
+      : "";
+  statusEl.textContent = `Analyzed ${sentences.length} sentence${sentences.length === 1 ? "" : "s"}${bundleBit}.`;
   btn.disabled = false;
 }
 
