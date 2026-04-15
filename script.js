@@ -1,6 +1,7 @@
-const DATA_URL = "greenwashing_claim_history.json";
-const VALIDATED_MAPPINGS_URL = "8B model/validated_mappings.jsonl";
-const FLAGGED_MAPPINGS_URL = "8B model/flagged_mappings.jsonl";
+const CLAIM_HISTORY_URL = "greenwashing_claim_history.json";
+const SUPERCLAIMS_URL = "greenwashing_superclaims.json";
+const CODEBOOK_URL = "greenwashing_codebook.json";
+const CLAIM_SUPERCLAIM_MAP_URL = "claim_superclaim_map.json";
 const COLLAPSE_MAP_URL = "subclaim_bertopic_collapse.json";
 
 let flattenedSnippets = null;
@@ -8,16 +9,161 @@ let flattenedSnippets = null;
 let artifactBundleVersion = null;
 /** @type {Map<string, { topicId: number, collapseFlag: boolean, collapseWith: string[], topicLabel?: string, hierarchyConfidence?: number }> | null} */
 let collapseBySubclaim = null;
+/** @type {Map<string, { superclaimId: string, superclaimText: string }> | null} subclaim → mapped superclaim (from loaded JSON) */
+let superclaimMappingBySubclaim = null;
 let dataLoadError = null;
+
+function normalizeSubclaimId(raw) {
+  const s = String(raw).trim();
+  if (!s) return "";
+  if (s.startsWith("NC_")) return s;
+  return `NC_${s.replace(/^(NC_|SC_)/, "")}`;
+}
+
+function normalizeSuperclaimId(raw) {
+  const s = String(raw).trim();
+  if (!s) return "";
+  if (s.startsWith("SC_")) return s;
+  return `SC_${s.replace(/^(SC_|NC_)/, "")}`;
+}
+
+/**
+ * @param {unknown} json
+ * @param {"subclaim" | "superclaim"} kind
+ * @returns {Map<string, string>}
+ */
+function loadIdTextMap(json, kind) {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    const label =
+      kind === "subclaim" ? "greenwashing_codebook.json" : "greenwashing_superclaims.json";
+    throw new Error(`${label} must be a JSON object of {id: text}`);
+  }
+  const out = new Map();
+  for (const [k, v] of Object.entries(json)) {
+    const text = String(v == null ? "" : v).trim();
+    const id =
+      kind === "subclaim"
+        ? normalizeSubclaimId(k)
+        : normalizeSuperclaimId(k);
+    if (!id) continue;
+    out.set(id, text);
+  }
+  return out;
+}
+
+/**
+ * @param {unknown} obj
+ * @returns {{ subclaimId: string, superclaimId: string, mapSuperText: string }[]}
+ */
+function parseClaimSuperclaimMap(obj) {
+  const rows = [];
+  if (obj == null) return rows;
+
+  if (typeof obj === "object" && !Array.isArray(obj)) {
+    const keys = Object.keys(obj);
+    const first = keys[0];
+    const sample = first != null ? obj[first] : undefined;
+    const isCombined =
+      sample != null &&
+      typeof sample === "object" &&
+      !Array.isArray(sample) &&
+      (Object.prototype.hasOwnProperty.call(sample, "superclaim_id") ||
+        Object.prototype.hasOwnProperty.call(sample, "superclaimId") ||
+        Object.prototype.hasOwnProperty.call(sample, "sc_id"));
+
+    if (isCombined) {
+      for (const [subId, record] of Object.entries(obj)) {
+        if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+        const sc =
+          record.superclaim_id ??
+          record.superclaimId ??
+          record.sc_id ??
+          record.SC;
+        if (sc == null) continue;
+        const mapSuperText = String(
+          record.superclaim_text ??
+            record.superclaimText ??
+            record.superclaim ??
+            ""
+        ).trim();
+        rows.push({
+          subclaimId: normalizeSubclaimId(subId),
+          superclaimId: normalizeSuperclaimId(sc),
+          mapSuperText,
+        });
+      }
+      return rows;
+    }
+
+    for (const [nc, sc] of Object.entries(obj)) {
+      rows.push({
+        subclaimId: normalizeSubclaimId(nc),
+        superclaimId: normalizeSuperclaimId(sc),
+        mapSuperText: "",
+      });
+    }
+    return rows;
+  }
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      if (Array.isArray(item) && item.length >= 2) {
+        rows.push({
+          subclaimId: normalizeSubclaimId(item[0]),
+          superclaimId: normalizeSuperclaimId(item[1]),
+          mapSuperText: "",
+        });
+        continue;
+      }
+      if (item && typeof item === "object") {
+        const nc =
+          item.subclaim_id ??
+          item.nc_id ??
+          item.subclaim ??
+          item.NC;
+        const sc =
+          item.superclaim_id ??
+          item.sc_id ??
+          item.superclaim ??
+          item.SC;
+        if (nc == null || sc == null) continue;
+        const mapSuperText = String(
+          item.superclaim_text ?? item.superclaimText ?? ""
+        ).trim();
+        rows.push({
+          subclaimId: normalizeSubclaimId(nc),
+          superclaimId: normalizeSuperclaimId(sc),
+          mapSuperText,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
 
 async function loadClaimsData() {
   try {
-    // Load subclaim definitions (ids + current_text + history).
-    const res = await fetch(DATA_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+    const [historyRes, superRes, codebookRes, mapRes] = await Promise.all([
+      fetch(CLAIM_HISTORY_URL),
+      fetch(SUPERCLAIMS_URL),
+      fetch(CODEBOOK_URL),
+      fetch(CLAIM_SUPERCLAIM_MAP_URL),
+    ]);
 
-    // BERTopic collapse flags (offline artifact; optional).
+    if (!historyRes.ok) throw new Error(`claim history HTTP ${historyRes.status}`);
+    if (!superRes.ok) throw new Error(`superclaims HTTP ${superRes.status}`);
+    if (!codebookRes.ok) throw new Error(`codebook HTTP ${codebookRes.status}`);
+    if (!mapRes.ok) throw new Error(`claim_superclaim_map HTTP ${mapRes.status}`);
+
+    const [historyJson, superJson, codebookJson, mapJson] = await Promise.all([
+      historyRes.json(),
+      superRes.json(),
+      codebookRes.json(),
+      mapRes.json(),
+    ]);
+
+    // BERTopic collapse (offline artifact; optional).
     collapseBySubclaim = new Map();
     try {
       const collapseRes = await fetch(COLLAPSE_MAP_URL);
@@ -36,7 +182,7 @@ async function loadClaimsData() {
           const entry = {
             topicId: Number(row.topic_id),
             collapseFlag: Boolean(row.collapse_flag),
-            collapseWith: collapseWith,
+            collapseWith,
             topicLabel:
               typeof row.topic_label === "string" ? row.topic_label : undefined,
           };
@@ -47,60 +193,40 @@ async function loadClaimsData() {
         }
       }
     } catch {
-      // Missing or invalid collapse file: UI continues without flags.
+      // Missing or invalid collapse file: UI continues without collapse hints.
     }
 
-    const claims = json.claims || {};
-
-    // Load validated and flagged subclaim→superclaim mappings (ids + superclaim text).
-    const validatedRes = await fetch(VALIDATED_MAPPINGS_URL);
-    if (!validatedRes.ok) throw new Error(`HTTP ${validatedRes.status}`);
-    const validatedText = await validatedRes.text();
-
-    const flaggedRes = await fetch(FLAGGED_MAPPINGS_URL);
-    if (!flaggedRes.ok) throw new Error(`HTTP ${flaggedRes.status}`);
-    const flaggedText = await flaggedRes.text();
+    const superclaimsById = loadIdTextMap(superJson, "superclaim");
+    const codebookById = loadIdTextMap(codebookJson, "subclaim");
+    const mapRows = parseClaimSuperclaimMap(mapJson);
 
     const superclaimBySubclaim = new Map();
-
-    function ingestMappings(rawText, { preferIfMissing = false } = {}) {
-      rawText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .forEach((line) => {
-        try {
-          const rec = JSON.parse(line);
-          if (!rec.subclaim_id || !rec.superclaim_id) return;
-          // Prefer mappings that have an explicit superclaim_text.
-          const existing = superclaimBySubclaim.get(rec.subclaim_id);
-          if (existing && existing.superclaimText && !preferIfMissing) return;
-          superclaimBySubclaim.set(rec.subclaim_id, {
-            superclaimId: rec.superclaim_id,
-            superclaimText: rec.superclaim_text || "",
-          });
-        } catch {
-          // Ignore malformed lines.
-        }
+    for (const { subclaimId, superclaimId, mapSuperText } of mapRows) {
+      if (!subclaimId || !superclaimId) continue;
+      superclaimBySubclaim.set(subclaimId, {
+        superclaimId,
+        superclaimText:
+          superclaimsById.get(superclaimId) || mapSuperText || "",
       });
     }
 
-    // Validated mappings win; flagged fill in any gaps.
-    ingestMappings(validatedText);
-    ingestMappings(flaggedText, { preferIfMissing: true });
+    superclaimMappingBySubclaim = superclaimBySubclaim;
 
+    const claims = historyJson.claims || {};
     const snippets = [];
 
-    // Each entry in `claims` represents a *subclaim* (e.g., "NC_46").
-    // Its `history` contains all source snippets that have been mapped to that subclaim.
     for (const [claimId, claimObj] of Object.entries(claims)) {
+      if (!claimObj || typeof claimObj !== "object") continue;
       const subclaimId = claimId.startsWith("NC_")
         ? claimId
         : `NC_${claimId.replace(/^(NC_|SC_)/, "")}`;
-      const subclaimText = claimObj.current_text || "";
+      const subclaimText =
+        codebookById.get(subclaimId) ||
+        claimObj.current_text ||
+        "";
 
       const mapping = superclaimBySubclaim.get(subclaimId);
-      if (!mapping) continue; // If we don't know its superclaim, skip for this UI.
+      if (!mapping) continue;
 
       const { superclaimId, superclaimText } = mapping;
       const history = Array.isArray(claimObj.history) ? claimObj.history : [];
@@ -121,77 +247,113 @@ async function loadClaimsData() {
 
     flattenedSnippets = snippets;
   } catch (err) {
-    console.error("Failed to load claim history:", err);
+    console.error("Failed to load claim data:", err);
     dataLoadError = err;
   }
 }
 
-function splitIntoSentences(text) {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (!cleaned) return [];
+/** Paragraphs = blocks separated by one or more blank lines (after normalizing newlines). */
+function splitIntoParagraphs(text) {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+  return normalized
+    .split(/\n\s*\n+/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
 
-  // Simple abbreviation handling so things like "U.S." are not split as sentences.
-  const abbreviations = new Set([
-    "U.S.",
-    "U.K.",
-    "U.N.",
-    "Mr.",
-    "Ms.",
-    "Mrs.",
-    "Dr.",
-    "Prof.",
-    "Inc.",
-    "Ltd.",
-    "Co.",
-    "Jr.",
-    "Sr.",
-    "e.g.",
-    "i.e.",
-  ]);
+function computeMatchConfidence(paragraphLower, snippetLower) {
+  // NOTE: Keeps *mapping selection* behavior (local overlap / LCS).
+  if (!paragraphLower || !snippetLower) return 0;
+  if (paragraphLower === snippetLower) return 1;
+  if (snippetLower.includes(paragraphLower) || paragraphLower.includes(snippetLower)) return 1;
 
-  const sentences = [];
-  let startIdx = 0;
+  const minLen = Math.min(paragraphLower.length, snippetLower.length);
+  if (minLen < 12) return 0;
 
-  for (let i = 0; i < cleaned.length; i++) {
-    const ch = cleaned[i];
-    if (ch === "." || ch === "!" || ch === "?") {
-      // Look backwards to see if this punctuation ends a known abbreviation.
-      let wordStart = i;
-      while (wordStart > 0 && cleaned[wordStart - 1] !== " ") {
-        wordStart--;
-      }
-      const candidateWord = cleaned.slice(wordStart, i + 1);
-      const isAbbrev = abbreviations.has(candidateWord);
+  const intersection = longestCommonSubstr(paragraphLower, snippetLower);
+  return intersection.length / minLen;
+}
 
-      // Also require that this is likely an end-of-sentence: next char is space or end of string.
-      const nextChar = cleaned[i + 1] || "";
-      const likelyBoundary = !nextChar || nextChar === " ";
+/**
+ * Unique superclaims mapped from peer subclaims in the same BERTopic cluster.
+ * @param {string[]} peerSubclaimIds
+ * @param {string} [currentSuperclaimId] matched superclaim for this row (for labels)
+ */
+function superclaimTargetsFromPeers(peerSubclaimIds, currentSuperclaimId) {
+  const map = superclaimMappingBySubclaim;
+  if (!map || !peerSubclaimIds.length) return [];
 
-      if (!isAbbrev && likelyBoundary) {
-        const sentence = cleaned.slice(startIdx, i + 1).trim();
-        if (sentence) sentences.push(sentence);
-        startIdx = i + 1;
-      }
+  const bySc = new Map();
+  for (const raw of peerSubclaimIds) {
+    const sid = normalizeSubclaimId(raw);
+    if (!sid) continue;
+    const m = map.get(sid);
+    if (!m || !m.superclaimId) continue;
+    if (!bySc.has(m.superclaimId)) {
+      bySc.set(m.superclaimId, {
+        superclaimId: m.superclaimId,
+        superclaimText: m.superclaimText || "",
+      });
     }
   }
 
-  const remainder = cleaned.slice(startIdx).trim();
-  if (remainder) sentences.push(remainder);
+  const list = Array.from(bySc.values()).map((entry) => ({
+    ...entry,
+    isCurrentMapping:
+      Boolean(currentSuperclaimId) && entry.superclaimId === currentSuperclaimId,
+  }));
 
-  return sentences;
+  list.sort((a, b) => {
+    if (a.isCurrentMapping !== b.isCurrentMapping) return a.isCurrentMapping ? 1 : -1;
+    return a.superclaimId.localeCompare(b.superclaimId);
+  });
+
+  return list;
 }
 
-function computeMatchConfidence(sentenceLower, snippetLower) {
-  // NOTE: Keeps *mapping selection* behavior (local overlap / LCS).
-  if (!sentenceLower || !snippetLower) return 0;
-  if (sentenceLower === snippetLower) return 1;
-  if (snippetLower.includes(sentenceLower) || sentenceLower.includes(snippetLower)) return 1;
-
-  const minLen = Math.min(sentenceLower.length, snippetLower.length);
-  if (minLen < 12) return 0;
-
-  const intersection = longestCommonSubstr(sentenceLower, snippetLower);
-  return intersection.length / minLen;
+function formatSuperclaimTargetsHtml(targets, { mappedPeerCount, artifactPeerCount }) {
+  if (!targets.length) {
+    return `<div class="collapse-peer-superclaims collapse-peer-superclaims--empty">No superclaim targets could be resolved from cluster peers that still appear in your map.</div>`;
+  }
+  const maxShow = 8;
+  const slice = targets.slice(0, maxShow);
+  const more =
+    targets.length > maxShow
+      ? `<div class="collapse-more">+${targets.length - maxShow} more superclaim(s)</div>`
+      : "";
+  const staleNote =
+    artifactPeerCount > mappedPeerCount
+      ? `<p class="collapse-peer-superclaims-stale">${artifactPeerCount - mappedPeerCount} offline cluster peer(s) are not in your current <code>claim_superclaim_map</code> and were ignored.</p>`
+      : "";
+  const items = slice
+    .map((t) => {
+      const idHtml = `<span class="claim-id">${escapeHtml(t.superclaimId)}</span>`;
+      const badge = t.isCurrentMapping
+        ? ` <span class="collapse-mapping-badge">same as match</span>`
+        : "";
+      const textShort = t.superclaimText
+        ? escapeHtml(
+            t.superclaimText.length > 160
+              ? `${t.superclaimText.slice(0, 157)}…`
+              : t.superclaimText
+          )
+        : "";
+      return `<li class="collapse-sc-target-item">
+        <div class="collapse-sc-target-line">${idHtml}${badge}</div>
+        ${textShort ? `<div class="collapse-sc-target-text">${textShort}</div>` : ""}
+      </li>`;
+    })
+    .join("");
+  return `
+    <div class="collapse-peer-superclaims">
+      <div class="collapse-peer-superclaims-title">Potential superclaims to collapse toward</div>
+      <p class="collapse-peer-superclaims-hint">Using <strong>${mappedPeerCount}</strong> cluster peer subclaim${mappedPeerCount === 1 ? "" : "s"} that still exist in your map${artifactPeerCount !== mappedPeerCount ? ` (of ${artifactPeerCount} in the offline artifact)` : ""}. Targets below are their mapped superclaims.</p>
+      ${staleNote}
+      <ul class="collapse-sc-target-list">${items}</ul>
+      ${more}
+    </div>
+  `;
 }
 
 function formatHierarchyLine(row) {
@@ -203,14 +365,18 @@ function formatHierarchyLine(row) {
     return { html: "", titlePart: "" };
   }
   const v = row.hierarchyConfidence;
-  const html = `<div class="hierarchy-confidence">Offline semantic confidence (subclaim↔superclaim): <strong>${v.toFixed(2)}</strong></div>`;
+  const html = `<div class="hierarchy-confidence">Offline cosine similarity (subclaim↔superclaim): <strong>${v.toFixed(2)}</strong></div>`;
   return {
     html,
-    titlePart: `Offline embedding similarity: ${v.toFixed(2)}`,
+    titlePart: `Embedding cosine similarity: ${v.toFixed(2)}`,
   };
 }
 
-function formatCollapseMeta(subclaimId) {
+/**
+ * @param {string} subclaimId
+ * @param {string} [currentSuperclaimId] superclaim id for the matched row (for target labeling)
+ */
+function formatCollapseMeta(subclaimId, currentSuperclaimId) {
   if (!collapseBySubclaim || !collapseBySubclaim.size) {
     return {
       html: `<span class="collapse-meta">No artifact loaded (run <code>python scripts/build_subclaim_collapse_bertopic.py</code>).</span>`,
@@ -225,14 +391,24 @@ function formatCollapseMeta(subclaimId) {
     };
   }
   const hier = formatHierarchyLine(row);
-  const peers = row.collapseWith || [];
+  const peersArtifact = (row.collapseWith || []).map(String);
+  const peersMapped = superclaimMappingBySubclaim
+    ? peersArtifact.filter((p) =>
+        superclaimMappingBySubclaim.has(normalizeSubclaimId(p))
+      )
+    : [...peersArtifact];
+
   const label = row.topicLabel ? escapeHtml(String(row.topicLabel)) : "";
-  if (!row.collapseFlag || peers.length === 0) {
+  if (!row.collapseFlag || peersArtifact.length === 0) {
     const tid = Number.isFinite(row.topicId) ? row.topicId : "";
     const labelBit = label
       ? `<div class="collapse-topic-label">${label}</div>`
       : "";
-    const titleBits = [hier.titlePart, label ? `BERTopic: ${row.topicLabel}` : "", "Singleton or outlier — not flagged for merge"].filter(Boolean);
+    const titleBits = [
+      hier.titlePart,
+      label ? `Topic label: ${row.topicLabel}` : "",
+      "Singleton or outlier — not flagged for merge",
+    ].filter(Boolean);
     return {
       html: `
         <div class="collapse-meta">
@@ -244,51 +420,78 @@ function formatCollapseMeta(subclaimId) {
       title: titleBits.join(" · "),
     };
   }
-  const peerList = peers
-    .slice(0, 8)
-    .map((id) => `<span class="claim-id">${escapeHtml(id)}</span>`)
-    .join(", ");
-  const more =
-    peers.length > 8 ? ` <span class="collapse-more">+${peers.length - 8} more</span>` : "";
+
+  if (peersMapped.length === 0) {
+    const labelBlock = label
+      ? `<div class="collapse-topic-label">${label}</div>`
+      : "";
+    const titleBits = [
+      hier.titlePart,
+      label ? `Topic label: ${row.topicLabel}` : "",
+      "Cluster peers missing from current map",
+    ].filter(Boolean);
+    return {
+      html: `
+        <div class="collapse-meta">
+          ${hier.html}
+          <span class="collapse-badge">Topic cluster</span>
+          ${labelBlock}
+          <div class="collapse-stale-cluster-msg">
+            The offline artifact lists ${peersArtifact.length} cluster peer subclaim${peersArtifact.length === 1 ? "" : "s"}, but none appear in your current <code>claim_superclaim_map</code>. Regenerate <code>subclaim_bertopic_collapse.json</code> or refresh the map so collapse targets stay in sync.
+          </div>
+        </div>
+      `,
+      title: titleBits.join(" · "),
+    };
+  }
+
+  const scTargets = superclaimTargetsFromPeers(peersMapped, currentSuperclaimId);
+  const targetsHtml = formatSuperclaimTargetsHtml(scTargets, {
+    mappedPeerCount: peersMapped.length,
+    artifactPeerCount: peersArtifact.length,
+  });
   const labelBlock = label
     ? `<div class="collapse-topic-label">${label}</div>`
     : "";
   const titleBits = [
     hier.titlePart,
-    `Same BERTopic cluster as: ${peers.join(", ")}`,
+    label ? `Topic label: ${row.topicLabel}` : "",
+    scTargets.length
+      ? `Superclaims: ${scTargets.map((t) => t.superclaimId).join(", ")}`
+      : "",
   ].filter(Boolean);
   return {
     html: `
       <div class="collapse-meta">
         ${hier.html}
-        <span class="collapse-badge">May collapse with</span>
+        <span class="collapse-badge">Topic cluster</span>
         ${labelBlock}
-        <div class="collapse-peers">${peerList}${more}</div>
+        ${targetsHtml}
       </div>
     `,
     title: titleBits.join(" · "),
   };
 }
 
-function findBestMatchesForSentence(sentence) {
+function findBestMatchesForParagraph(paragraph) {
   if (!flattenedSnippets || flattenedSnippets.length === 0) return [];
 
-  const lowerSentence = sentence.toLowerCase();
+  const lowerParagraph = paragraph.toLowerCase();
 
   const candidates = flattenedSnippets
     .filter((s) => {
-      const confidence = computeMatchConfidence(lowerSentence, s.snippetLower);
+      const confidence = computeMatchConfidence(lowerParagraph, s.snippetLower);
       return confidence >= 0.6;
     })
     .map((s) => ({
       ...s,
       mappingConfidence: computeMatchConfidence(
-        lowerSentence,
+        lowerParagraph,
         s.snippetLower
       ),
     }));
 
-  // For each sentence, ensure at most one match per subclaim.
+  // For each paragraph, ensure at most one match per subclaim.
   const bestBySubclaim = new Map();
 
   for (const c of candidates) {
@@ -328,39 +531,67 @@ function longestCommonSubstr(a, b) {
   return a.slice(endIdx - longest, endIdx);
 }
 
-function renderResults(sentencesWithMatches) {
+function renderResults(paragraphsWithMatches) {
   const container = document.getElementById("results-container");
   container.innerHTML = "";
 
-  if (!sentencesWithMatches.length) {
+  if (!paragraphsWithMatches.length) {
     const p = document.createElement("p");
     p.className = "placeholder";
-    p.textContent = "No sentences found. Paste article text and click “Analyze sentences”.";
+    p.textContent = "No paragraphs found. Paste article text (paragraphs separated by blank lines) and click “Analyze paragraphs”.";
     container.appendChild(p);
     return;
   }
 
-  const table = document.createElement("table");
-  table.className = "results-table";
+  const ledger = document.createElement("div");
+  ledger.className = "results-ledger";
+  const total = paragraphsWithMatches.length;
 
-  const thead = document.createElement("thead");
-  thead.innerHTML = `
-    <tr>
-      <th>Sentence</th>
-      <th>Subclaim(s)</th>
-      <th>Superclaim(s)</th>
-    </tr>
-  `;
+  paragraphsWithMatches.forEach(({ paragraph, matches }, idx) => {
+    const card = document.createElement("article");
+    card.className = "paragraph-result-card";
+    card.setAttribute("aria-labelledby", `paragraph-result-title-${idx}`);
 
-  const tbody = document.createElement("tbody");
+    const header = document.createElement("header");
+    header.className = "paragraph-result-header";
+    const badge = document.createElement("span");
+    badge.className = "paragraph-result-badge";
+    badge.textContent = String(idx + 1);
+    const headerText = document.createElement("div");
+    headerText.className = "paragraph-result-header-text";
+    const titleEl = document.createElement("div");
+    titleEl.className = "paragraph-result-title";
+    titleEl.id = `paragraph-result-title-${idx}`;
+    titleEl.textContent = `Paragraph ${idx + 1} of ${total}`;
+    const subEl = document.createElement("div");
+    subEl.className = "paragraph-result-sub";
+    subEl.textContent = "Maps below apply only to this paragraph.";
+    headerText.appendChild(titleEl);
+    headerText.appendChild(subEl);
+    header.appendChild(badge);
+    header.appendChild(headerText);
+    card.appendChild(header);
 
-  sentencesWithMatches.forEach(({ sentence, matches }) => {
+    const table = document.createElement("table");
+    table.className = "results-table results-table--in-card";
+
+    const thead = document.createElement("thead");
+    thead.innerHTML = `
+      <tr>
+        <th scope="col">Paragraph text</th>
+        <th scope="col">Subclaim(s)</th>
+        <th scope="col">Superclaim(s)</th>
+      </tr>
+    `;
+
+    const tbody = document.createElement("tbody");
+
     if (!matches.length) {
       const tr = document.createElement("tr");
 
       const tdSentence = document.createElement("td");
-      tdSentence.className = "sentence-cell";
-      tdSentence.textContent = sentence;
+      tdSentence.className = "sentence-cell paragraph-cell";
+      tdSentence.textContent = paragraph;
 
       const tdSub = document.createElement("td");
       const tdSuper = document.createElement("td");
@@ -372,32 +603,30 @@ function renderResults(sentencesWithMatches) {
       tr.appendChild(tdSub);
       tr.appendChild(tdSuper);
       tbody.appendChild(tr);
-      return;
-    }
+    } else {
+      const rowSpan = matches.length;
 
-    const rowSpan = matches.length;
+      matches.forEach((m, mIdx) => {
+        const tr = document.createElement("tr");
 
-    matches.forEach((m, idx) => {
-      const tr = document.createElement("tr");
+        if (mIdx === 0) {
+          const tdSentence = document.createElement("td");
+          tdSentence.className = "sentence-cell paragraph-cell";
+          tdSentence.textContent = paragraph;
+          tdSentence.rowSpan = rowSpan;
+          tr.appendChild(tdSentence);
+        }
 
-      if (idx === 0) {
-        const tdSentence = document.createElement("td");
-        tdSentence.className = "sentence-cell";
-        tdSentence.textContent = sentence;
-        tdSentence.rowSpan = rowSpan;
-        tr.appendChild(tdSentence);
-      }
+        const tdSub = document.createElement("td");
+        const tdSuper = document.createElement("td");
 
-      const tdSub = document.createElement("td");
-      const tdSuper = document.createElement("td");
-
-      tdSub.innerHTML = `
+        tdSub.innerHTML = `
         <div class="claim-label">Subclaim <span class="claim-id">(${m.subclaimId})</span></div>
         <div class="claim-text">${m.subclaimText}</div>
       `;
 
-      const collapse = formatCollapseMeta(m.subclaimId);
-      tdSuper.innerHTML = `
+        const collapse = formatCollapseMeta(m.subclaimId, m.superclaimId);
+        tdSuper.innerHTML = `
         <div class="claim-label">Superclaim <span class="claim-id">(${m.superclaimId})</span></div>
         <div class="claim-text">${m.superclaimText}</div>
         <div class="claim-meta collapse-block" title="${escapeHtmlAttr(collapse.title)}">
@@ -405,15 +634,19 @@ function renderResults(sentencesWithMatches) {
         </div>
       `;
 
-      tr.appendChild(tdSub);
-      tr.appendChild(tdSuper);
-      tbody.appendChild(tr);
-    });
+        tr.appendChild(tdSub);
+        tr.appendChild(tdSuper);
+        tbody.appendChild(tr);
+      });
+    }
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    card.appendChild(table);
+    ledger.appendChild(card);
   });
 
-  table.appendChild(thead);
-  table.appendChild(tbody);
-  container.appendChild(table);
+  container.appendChild(ledger);
 }
 
 function escapeHtmlAttr(s) {
@@ -446,7 +679,7 @@ async function handleAnalyzeClick() {
   }
 
   btn.disabled = true;
-  statusEl.textContent = "Loading claim history and analyzing…";
+  statusEl.textContent = "Loading claim data and analyzing…";
   statusEl.classList.remove("error-text");
 
   if (!flattenedSnippets && !dataLoadError) {
@@ -454,16 +687,17 @@ async function handleAnalyzeClick() {
   }
 
   if (dataLoadError) {
-    statusEl.textContent = "Unable to load claim history JSON. Check that it is served from the same folder.";
+    statusEl.textContent =
+      "Unable to load claim JSON files. Serve the folder over HTTP and check that the four data files are present.";
     statusEl.classList.add("error-text");
     btn.disabled = false;
     return;
   }
 
-  const sentences = splitIntoSentences(text);
-  const withMatches = sentences.map((s) => ({
-    sentence: s,
-    matches: findBestMatchesForSentence(s),
+  const paragraphs = splitIntoParagraphs(text);
+  const withMatches = paragraphs.map((p) => ({
+    paragraph: p,
+    matches: findBestMatchesForParagraph(p),
   }));
 
   renderResults(withMatches);
@@ -471,7 +705,7 @@ async function handleAnalyzeClick() {
     artifactBundleVersion != null
       ? ` · artifact ${artifactBundleVersion}`
       : "";
-  statusEl.textContent = `Analyzed ${sentences.length} sentence${sentences.length === 1 ? "" : "s"}${bundleBit}.`;
+  statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}.`;
   btn.disabled = false;
 }
 
@@ -479,4 +713,3 @@ window.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("analyze-btn");
   btn.addEventListener("click", handleAnalyzeClick);
 });
-

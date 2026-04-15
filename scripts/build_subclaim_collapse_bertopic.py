@@ -1,10 +1,15 @@
 """
-Offline pipeline: BERTopic clusters on subclaim current_text + precomputed
-semantic confidence (cosine similarity of subclaim vs superclaim embeddings).
+Offline pipeline: BERTopic (or sklearn DBSCAN) clusters subclaim text, then adds
+cosine similarity (subclaim vs mapped superclaim) using the same embedding space.
+
+Subclaim text prefers ``greenwashing_codebook.json``, then ``current_text`` in
+``greenwashing_claim_history.json``. Superclaim text comes from
+``greenwashing_superclaims.json`` via ``claim_superclaim_map.json``.
+
+Writes subclaim_bertopic_collapse.json (bundle fingerprint + per-subclaim rows:
+topic / collapse hints + hierarchy_confidence).
 
 No live classification APIs — output is consumed as static JSON by the UI.
-
-Writes ../subclaim_bertopic_collapse.json (claims bundle version + per-subclaim rows).
 
 Usage (from repo root):
   pip install -r requirements.txt
@@ -27,8 +32,9 @@ import numpy as np
 # Repo root (parent of scripts/)
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CLAIMS = ROOT / "greenwashing_claim_history.json"
-DEFAULT_VALIDATED = ROOT / "8B model" / "validated_mappings.jsonl"
-DEFAULT_FLAGGED = ROOT / "8B model" / "flagged_mappings.jsonl"
+DEFAULT_MAP = ROOT / "claim_superclaim_map.json"
+DEFAULT_SUPERCLAIMS = ROOT / "greenwashing_superclaims.json"
+DEFAULT_CODEBOOK = ROOT / "greenwashing_codebook.json"
 DEFAULT_OUT = ROOT / "subclaim_bertopic_collapse.json"
 
 
@@ -40,40 +46,107 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _load_mapping_jsonl(path: Path) -> dict[str, dict[str, str]]:
-    """subclaim_id -> {superclaim_id, superclaim_text}."""
-    out: dict[str, dict[str, str]] = {}
-    if not path.is_file():
-        return out
+def _strip_dual_prefix(s: str, a: str, b: str) -> str:
+    if s.startswith(a):
+        return s[len(a) :]
+    if s.startswith(b):
+        return s[len(b) :]
+    return s
+
+
+def _normalize_nc(raw: str) -> str:
+    s = str(raw).strip()
+    if not s:
+        return ""
+    if s.startswith("NC_"):
+        return s
+    body = _strip_dual_prefix(s, "NC_", "SC_")
+    return f"NC_{body}"
+
+
+def _normalize_sc(raw: str) -> str:
+    s = str(raw).strip()
+    if not s:
+        return ""
+    if s.startswith("SC_"):
+        return s
+    body = _strip_dual_prefix(s, "SC_", "NC_")
+    return f"SC_{body}"
+
+
+def _load_id_text_json(path: Path, kind: str) -> dict[str, str]:
     with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            sid = rec.get("subclaim_id")
-            scid = rec.get("superclaim_id")
-            if not sid or not scid:
-                continue
-            stext = str(rec.get("superclaim_text") or "").strip()
-            out[sid] = {"superclaim_id": str(scid), "superclaim_text": stext}
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must be a JSON object of {{id: text}}")
+    out: dict[str, str] = {}
+    for k, v in data.items():
+        text = str(v if v is not None else "").strip()
+        nid = _normalize_nc(str(k)) if kind == "subclaim" else _normalize_sc(str(k))
+        if nid:
+            out[nid] = text
     return out
 
 
-def _merge_validated_then_flagged(
-    validated: dict[str, dict[str, str]],
-    flagged: dict[str, dict[str, str]],
-) -> dict[str, dict[str, str]]:
-    """Same as script.js: validated wins; flagged fills gaps / missing superclaim text."""
-    out = dict(validated)
-    for sid, row in flagged.items():
-        existing = out.get(sid)
-        if existing and existing.get("superclaim_text"):
-            continue
-        out[sid] = row
+def _parse_claim_superclaim_map(obj: Any) -> dict[str, str]:
+    """Normalized subclaim_id -> superclaim_id."""
+    pairs: list[tuple[str, str]] = []
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        keys = list(obj.keys())
+        first_key = keys[0] if keys else None
+        sample = obj[first_key] if first_key is not None else None
+        is_combined = (
+            sample is not None
+            and isinstance(sample, dict)
+            and not isinstance(sample, list)
+            and (
+                "superclaim_id" in sample
+                or "superclaimId" in sample
+                or "sc_id" in sample
+            )
+        )
+        if is_combined:
+            for sub_id, record in obj.items():
+                if not isinstance(record, dict):
+                    continue
+                sc = (
+                    record.get("superclaim_id")
+                    or record.get("superclaimId")
+                    or record.get("sc_id")
+                    or record.get("SC")
+                )
+                if sc is None:
+                    continue
+                pairs.append((_normalize_nc(str(sub_id)), _normalize_sc(str(sc))))
+        else:
+            for nc, sc in obj.items():
+                pairs.append((_normalize_nc(str(nc)), _normalize_sc(str(sc))))
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                pairs.append((_normalize_nc(str(item[0])), _normalize_sc(str(item[1]))))
+            elif isinstance(item, dict):
+                nc = (
+                    item.get("subclaim_id")
+                    or item.get("nc_id")
+                    or item.get("subclaim")
+                    or item.get("NC")
+                )
+                sc = (
+                    item.get("superclaim_id")
+                    or item.get("sc_id")
+                    or item.get("superclaim")
+                    or item.get("SC")
+                )
+                if nc is None or sc is None:
+                    continue
+                pairs.append((_normalize_nc(str(nc)), _normalize_sc(str(sc))))
+    out: dict[str, str] = {}
+    for sid, scid in pairs:
+        if sid and scid:
+            out[sid] = scid
     return out
 
 
@@ -325,11 +398,12 @@ def subclaim_rows_from_topics(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build BERTopic + offline semantic confidence artifact for subclaims.",
+        description="Build BERTopic / DBSCAN collapse artifact for subclaims.",
     )
     parser.add_argument("--claims-json", type=Path, default=DEFAULT_CLAIMS)
-    parser.add_argument("--validated-jsonl", type=Path, default=DEFAULT_VALIDATED)
-    parser.add_argument("--flagged-jsonl", type=Path, default=DEFAULT_FLAGGED)
+    parser.add_argument("--claim-superclaim-map", type=Path, default=DEFAULT_MAP)
+    parser.add_argument("--superclaims-json", type=Path, default=DEFAULT_SUPERCLAIMS)
+    parser.add_argument("--codebook-json", type=Path, default=DEFAULT_CODEBOOK)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--min-topic-size", type=int, default=2)
     parser.add_argument("--embedding-model", default="all-MiniLM-L6-v2")
@@ -360,23 +434,32 @@ def main() -> int:
         raise SystemExit(1)
 
     claims_path = args.claims_json
-    if not claims_path.is_file():
-        print(f"Claims file not found: {claims_path}", file=sys.stderr)
-        return 1
+    map_path = args.claim_superclaim_map
+    super_path = args.superclaims_json
+    codebook_path = args.codebook_json
 
-    claims_sha = _file_sha256(claims_path)
-    mapping_paths = [args.validated_jsonl, args.flagged_jsonl]
-    mapping_hashes: list[str] = []
-    for p in mapping_paths:
-        if p.is_file():
-            mapping_hashes.append(_file_sha256(p))
-    bundle_fingerprint = "|".join([claims_sha] + mapping_hashes)
+    for label, p in (
+        ("Claims JSON", claims_path),
+        ("claim_superclaim_map.json", map_path),
+        ("greenwashing_superclaims.json", super_path),
+        ("greenwashing_codebook.json", codebook_path),
+    ):
+        if not p.is_file():
+            print(f"{label} not found: {p}", file=sys.stderr)
+            return 1
+
+    data_bundle_paths = (claims_path, map_path, super_path, codebook_path)
+    data_hashes = [_file_sha256(p) for p in data_bundle_paths]
+    bundle_fingerprint = "|".join(data_hashes)
     claims_bundle_version = hashlib.sha256(bundle_fingerprint.encode("utf-8")).hexdigest()[:16]
 
-    mappings = _merge_validated_then_flagged(
-        _load_mapping_jsonl(args.validated_jsonl),
-        _load_mapping_jsonl(args.flagged_jsonl),
-    )
+    claims_sha = _file_sha256(claims_path)
+
+    codebook = _load_id_text_json(codebook_path, "subclaim")
+    superclaims = _load_id_text_json(super_path, "superclaim")
+    with open(map_path, encoding="utf-8") as f:
+        map_raw = json.load(f)
+    sub_to_super = _parse_claim_superclaim_map(map_raw)
 
     with open(claims_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -388,22 +471,40 @@ def main() -> int:
 
     ids: list[str] = []
     docs: list[str] = []
+    collected: set[str] = set()
+
+    def add_sid_doc(sid: str, text: str) -> None:
+        t = text.strip()
+        if not sid or not t or sid not in sub_to_super:
+            return
+        if sid in collected:
+            return
+        collected.add(sid)
+        ids.append(sid)
+        docs.append(t)
 
     for claim_id, obj in claims.items():
         sid = (
-            claim_id
+            str(claim_id)
             if str(claim_id).startswith("NC_")
             else f"NC_{str(claim_id).replace('NC_', '').replace('SC_', '')}"
         )
-        text = (obj or {}).get("current_text") or ""
-        text = str(text).strip()
-        if not text:
+        text = codebook.get(sid, "").strip() or str((obj or {}).get("current_text") or "").strip()
+        add_sid_doc(sid, text)
+
+    for sid in sub_to_super:
+        if sid in collected:
             continue
-        ids.append(sid)
-        docs.append(text)
+        text = codebook.get(sid, "").strip()
+        if text:
+            add_sid_doc(sid, text)
 
     if len(docs) < 2:
-        print("Need at least 2 subclaims with non-empty current_text.", file=sys.stderr)
+        print(
+            "Need at least 2 mapped subclaims with non-empty text "
+            "(codebook and/or claim history current_text).",
+            file=sys.stderr,
+        )
         return 1
 
     eb = args.embedding_backend
@@ -483,28 +584,26 @@ def main() -> int:
     print(f"Cluster backend used: {cluster_backend}")
     subclaims_out = subclaim_rows_from_topics(ids, topics, topic_model)
 
-    # Offline hierarchy confidence: cosine between encoded subclaim vs superclaim text
-    for sid, meta in mappings.items():
-        if sid not in subclaims_out:
+    sid_to_doc = dict(zip(ids, docs))
+    for sid in ids:
+        scid = sub_to_super.get(sid)
+        if not scid or sid not in subclaims_out:
             continue
-        claim_obj = claims.get(sid)
-        sub_text = ""
-        if isinstance(claim_obj, dict):
-            sub_text = str(claim_obj.get("current_text") or "").strip()
-        super_text = str(meta.get("superclaim_text") or "").strip()
+        sub_text = sid_to_doc.get(sid, "").strip()
+        super_text = superclaims.get(scid, "").strip()
         if not sub_text or not super_text:
             continue
         pair_emb = encode_fn([sub_text, super_text])
         sim = float(np.dot(pair_emb[0], pair_emb[1]))
         sim = max(0.0, min(1.0, sim))
         subclaims_out[sid]["hierarchy_confidence"] = round(sim, 4)
-        subclaims_out[sid]["superclaim_id"] = meta.get("superclaim_id", "")
+        subclaims_out[sid]["superclaim_id"] = scid
 
     out_obj: dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "claims_bundle_version": claims_bundle_version,
         "claims_source_sha256": claims_sha,
-        "mapping_files_sha256": mapping_hashes,
+        "data_files_sha256": data_hashes,
         "claims_version": claims_version_from_file,
         "cluster_backend": cluster_backend,
         "embedding_backend": embedding_backend_used,

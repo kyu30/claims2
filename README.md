@@ -1,26 +1,36 @@
 # Claim Mapping MVP UI
 
-Minimal UI to map article sentences to subclaims and superclaims derived from `greenwashing_claim_history.json`.
+Minimal UI to map article **paragraphs** to subclaims and superclaims using four JSON data files plus an optional offline collapse artifact.
+
+## Data files (required)
+
+Place these next to `index.html` (or serve the folder over HTTP):
+
+- `greenwashing_claim_history.json` — `claims` object: per subclaim, `current_text` and `history[].source_snippet`
+- `greenwashing_codebook.json` — object `{ "NC_*": "subclaim text", ... }` (canonical subclaim text; falls back to `current_text` in claim history if missing)
+- `greenwashing_superclaims.json` — object `{ "SC_*": "superclaim text", ... }`
+- `claim_superclaim_map.json` — subclaim → superclaim mapping: either a plain object `{ "NC_*": "SC_*", ... }`, an array of `{ subclaim_id, superclaim_id }` (optional `superclaim_text`), or a combined object keyed by subclaim id with `superclaim_id` / `superclaim_text` fields (see `runs/validation_run_20260306/claims_validation.py` for supported shapes)
+
+## Optional: collapse artifact
+
+- `subclaim_bertopic_collapse.json` — generated offline; adds BERTopic / DBSCAN **collapse hints** and **cosine similarity** (`hierarchy_confidence`) between each subclaim’s text and its mapped superclaim text (same embedding space as the build script). If missing, the UI still runs.
 
 ## Usage
 
-- Place `index.html`, `styles.css`, `script.js`, `greenwashing_claim_history.json`, mapping JSONL files under `8B model/`, and the generated artifact `subclaim_bertopic_collapse.json` in the same folder.
 - Start a simple static server from this folder (for example: `python -m http.server 8000`).
-- Paste an article into the text area and click **Analyze sentences**.
+- Paste an article into the text area and click **Analyze paragraphs**.
 
 For each detected sentence, the UI shows:
 
-- The **subclaim text** (from claim history) with an ID in parentheses (`NC_*`).
-- The corresponding **superclaim text** with its `SC_*` ID.
-- **Offline** signals from the BERTopic artifact (no live classifier API):
-  - **Semantic confidence**: cosine similarity between `current_text` and the mapped superclaim text (computed when you build the artifact).
-  - **Collapse hints**: whether other subclaims share the same BERTopic topic cluster (candidates to merge).
+- The **subclaim text** with its `NC_*` id
+- The **superclaim text** with its `SC_*` id
+- **Collapse hints** from the BERTopic artifact when present (no live classifier API)
 
-If no close match is found for a sentence, the UI displays a "No mapping found" message for that row.
+If no close match is found for a sentence, the UI shows a “No mapping found” message for that row.
 
-## Offline artifact (BERTopic + embeddings)
+## Offline artifact (BERTopic / DBSCAN)
 
-Mapping selection still uses the **local** heuristic in the browser. The **superclaim** column shows **precomputed** scores and flags from `subclaim_bertopic_collapse.json` — no OpenAI or other live classification API at click time.
+Paragraph→subclaim matching uses the **local** overlap / LCS heuristic in the browser. The **superclaim** column shows **precomputed** collapse metadata and **subclaim↔superclaim cosine similarity** from `subclaim_bertopic_collapse.json`.
 
 ### Build
 
@@ -29,7 +39,7 @@ pip install -r requirements.txt
 python scripts/build_subclaim_collapse_bertopic.py
 ```
 
-This reads `greenwashing_claim_history.json`, `8B model/validated_mappings.jsonl`, and `8B model/flagged_mappings.jsonl`, clusters subclaim `current_text` embeddings, and writes `subclaim_bertopic_collapse.json` with a `claims_bundle_version` fingerprint.
+This reads the four JSON files above (for bundle fingerprinting and mappings). It clusters subclaims using text from the **codebook** when present, otherwise `current_text` in claim history (only subclaims that appear in `claim_superclaim_map.json`). It then encodes each subclaim with its mapped **superclaim** text and writes **cosine similarity** per row. Output: `subclaim_bertopic_collapse.json` with `claims_bundle_version`.
 
 - **Default** (`--embedding-backend auto`): uses `sentence-transformers` when installed; otherwise **TF‑IDF + SVD** (no PyTorch).
 - **Full BERTopic** (topic labels): install `bertopic` and use `--embedding-backend sentence_transformers --cluster-backend bertopic` (needs a Python where `hdbscan` wheels install, e.g. 3.10+ on Windows).
@@ -40,12 +50,12 @@ Example without deep-learning stacks:
 python scripts/build_subclaim_collapse_bertopic.py --embedding-backend tfidf --cluster-backend sklearn
 ```
 
-### Claim bundle versioning (for future API-fed claims)
+### Claim bundle versioning
 
-- **`claims_bundle_version`** in the artifact is a short hash over the **claims file** and **mapping JSONL** contents. When claims or mappings change (including when you load a new snapshot from an API), regenerate the artifact so the UI stays aligned with the data.
+- **`claims_bundle_version`** in the artifact is a short hash over the four canonical JSON files. When any of them change, regenerate the artifact so collapse metadata stays aligned.
 - Optionally set **`claims_version`** in the root of `greenwashing_claim_history.json`; the build script copies it into the artifact for traceability.
-- After analysis, the status line shows the artifact id (`artifact …`) so you can confirm which build is in use.
+- After analysis, the status line shows the artifact id (`artifact …`) when a collapse file is loaded.
 
 ## Optional backend (LLM)
 
-The static UI does **not** require the backend for confidence. The FastAPI app under `backend/` is optional if you still want a separate LLM-based `/confidence` endpoint for other tools.
+The static UI does **not** require the backend. The FastAPI app under `backend/` is optional if you want a separate LLM-based `/confidence` endpoint for other tools.

@@ -9,7 +9,7 @@
 <body>
   <main class="app">
     <header class="app-header">
-      <h1>Article to Claim Mapper</h1>
+      <h1>Paragraph-Level Claim Mapping</h1>
       <p>
         Paste an article below.
       </p>
@@ -17,18 +17,18 @@
 
     <section class="input-section">
       <label for="article-input" class="field-label">Article text</label>
-      <textarea id="article-input" class="text-input" rows="10" placeholder="Paste article text here..."></textarea>
+      <textarea id="article-input" class="text-input" rows="10" placeholder="Paste article text here… Separate paragraphs with a blank line."></textarea>
 
       <div class="controls">
-        <button id="analyze-btn" class="primary-btn">Analyze text</button>
+        <button id="analyze-btn" class="primary-btn">Analyze paragraphs</button>
         <span id="status" class="status-text"></span>
       </div>
     </section>
 
     <section class="results-section">
-      <h2>Sentence ↔ Claim mappings</h2>
+      <h2>Paragraph ↔ Claim mappings</h2>
       <div id="results-container" class="results-container">
-        <p class="placeholder">No results yet. Paste an article and click “Analyze sentences”.</p>
+        <p class="placeholder">No results yet. Paste an article and click “Analyze paragraphs”.</p>
       </div>
     </section>
   </main>
