@@ -1,3 +1,9 @@
+---
+title: Claims2
+sdk: static
+app_file: index.html
+---
+
 # Claim Mapping MVP UI
 
 Minimal UI to map article **paragraphs** to subclaims and superclaims using four JSON data files plus an optional offline collapse artifact.
