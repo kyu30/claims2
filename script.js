@@ -252,12 +252,13 @@ async function loadClaimsData() {
   }
 }
 
-/** Paragraphs = blocks separated by one or more blank lines (after normalizing newlines). */
+/** Paragraphs = blocks separated by line breaks (after normalizing newlines). */
 function splitIntoParagraphs(text) {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
   return normalized
-    .split(/\n\s*\n+/)
+    // Treat each line as its own paragraph; ignore empty lines.
+    .split(/\n+/)
     .map((p) => p.replace(/\s+/g, " ").trim())
     .filter(Boolean);
 }
@@ -665,6 +666,166 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // ignore
+  }
+  if (!res.ok) {
+    const msg =
+      (data && (data.detail || data.message)) ||
+      text ||
+      `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function getJson(url) {
+  const res = await fetch(url, { method: "GET" });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // ignore
+  }
+  if (!res.ok) {
+    const msg =
+      (data && (data.detail || data.message)) ||
+      text ||
+      `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function formatProposalTitle(p) {
+  const type = p.type || "";
+  if (type === "new_subclaim") return "New subclaim";
+  if (type === "new_superclaim") return "New superclaim";
+  if (type === "link_subclaim_to_superclaim") return "Remap subclaim → superclaim";
+  if (type === "merge_subclaims") return "Merge subclaims";
+  if (type === "merge_superclaims") return "Merge superclaims";
+  return type || "Proposal";
+}
+
+function formatProposalBodyHtml(p) {
+  const payload = p.payload || {};
+  if (p.type === "new_subclaim") {
+    const sc = payload.suggestedSuperclaimId
+      ? `<div class="proposal-line"><strong>Suggested superclaim:</strong> <code>${escapeHtml(
+          payload.suggestedSuperclaimId
+        )}</code> ${payload.suggestedSuperclaimText ? `— ${escapeHtml(payload.suggestedSuperclaimText)}` : ""}</div>`
+      : "";
+    const conf =
+      typeof payload.confidence === "number"
+        ? `<div class="proposal-line"><strong>LLM confidence:</strong> ${(payload.confidence * 100).toFixed(0)}%</div>`
+        : "";
+    return `
+      <div class="proposal-line"><strong>Subclaim text:</strong> ${escapeHtml(
+        payload.subclaimText || ""
+      )}</div>
+      ${sc}
+      ${conf}
+      ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
+    `;
+  }
+  if (p.type === "new_superclaim") {
+    return `
+      <div class="proposal-line"><strong>Superclaim text:</strong> ${escapeHtml(
+        payload.superclaimText || ""
+      )}</div>
+      ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
+    `;
+  }
+  return `
+    <div class="proposal-line"><strong>Payload:</strong> <code>${escapeHtml(
+      JSON.stringify(payload)
+    )}</code></div>
+    ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
+  `;
+}
+
+async function refreshPendingProposals() {
+  const container = document.getElementById("proposals-container");
+  if (!container) return;
+
+  container.innerHTML = `<p class="placeholder">Loading pending proposals…</p>`;
+  let proposals = [];
+  try {
+    proposals = await getJson("/api/proposals?status=pending");
+  } catch (e) {
+    container.innerHTML = `<p class="placeholder error-text">Unable to load proposals: ${escapeHtml(
+      e.message || String(e)
+    )}</p>`;
+    return;
+  }
+
+  if (!Array.isArray(proposals) || proposals.length === 0) {
+    container.innerHTML = `<p class="placeholder">No pending proposals yet.</p>`;
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "proposal-list";
+
+  proposals.forEach((p) => {
+    const card = document.createElement("article");
+    card.className = "proposal-card";
+    card.innerHTML = `
+      <header class="proposal-header">
+        <div class="proposal-title">${escapeHtml(formatProposalTitle(p))}</div>
+        <div class="proposal-id"><code>${escapeHtml(p.id || "")}</code></div>
+      </header>
+      <div class="proposal-paragraph">${escapeHtml(p.paragraph || "")}</div>
+      <div class="proposal-body">${formatProposalBodyHtml(p)}</div>
+      <div class="proposal-actions">
+        <button class="action-btn" data-action="approve" data-id="${escapeHtmlAttr(
+          p.id || ""
+        )}">Approve</button>
+        <button class="action-btn action-btn--danger" data-action="reject" data-id="${escapeHtmlAttr(
+          p.id || ""
+        )}">Reject</button>
+        <button class="action-btn action-btn--accent" data-action="apply" data-id="${escapeHtmlAttr(
+          p.id || ""
+        )}">Apply</button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+
+  container.innerHTML = "";
+  container.appendChild(wrap);
+
+  container.querySelectorAll("button[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      const el = ev.currentTarget;
+      const action = el.getAttribute("data-action");
+      const id = el.getAttribute("data-id");
+      if (!id || !action) return;
+
+      el.disabled = true;
+      try {
+        await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {});
+        // Applying should also refresh claims data next run; for now just refresh the list.
+        await refreshPendingProposals();
+      } catch (e) {
+        el.disabled = false;
+        alert(`Proposal ${action} failed: ${e.message || String(e)}`);
+      }
+    });
+  });
+}
+
 async function handleAnalyzeClick() {
   const btn = document.getElementById("analyze-btn");
   const statusEl = document.getElementById("status");
@@ -679,13 +840,34 @@ async function handleAnalyzeClick() {
   }
 
   btn.disabled = true;
-  statusEl.textContent = "Loading claim data and analyzing…";
+  statusEl.textContent = "Analyzing…";
   statusEl.classList.remove("error-text");
 
+  // Prefer the backend LLM API (supports proposals + human approval). Fallback to local heuristic if unavailable.
+  try {
+    const api = await postJson("/api/analyze", { text });
+    const rows = Array.isArray(api?.paragraphs) ? api.paragraphs : [];
+    const withMatches = rows.map((r) => ({
+      paragraph: r.paragraph,
+      matches: Array.isArray(r.matches) ? r.matches : [],
+    }));
+
+    renderResults(withMatches);
+    statusEl.textContent = `Analyzed ${withMatches.length} paragraph${withMatches.length === 1 ? "" : "s"} · bundle ${escapeHtml(
+      api?.bundleVersion || ""
+    )}.`;
+    await refreshPendingProposals();
+    btn.disabled = false;
+    return;
+  } catch (e) {
+    console.warn("Backend /api/analyze failed; falling back to local matching.", e);
+  }
+
+  // Local fallback
+  statusEl.textContent = "Backend unavailable; running local heuristic…";
   if (!flattenedSnippets && !dataLoadError) {
     await loadClaimsData();
   }
-
   if (dataLoadError) {
     statusEl.textContent =
       "Unable to load claim JSON files. Serve the folder over HTTP and check that the four data files are present.";
@@ -699,12 +881,9 @@ async function handleAnalyzeClick() {
     paragraph: p,
     matches: findBestMatchesForParagraph(p),
   }));
-
   renderResults(withMatches);
   const bundleBit =
-    artifactBundleVersion != null
-      ? ` · artifact ${artifactBundleVersion}`
-      : "";
+    artifactBundleVersion != null ? ` · artifact ${artifactBundleVersion}` : "";
   statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}.`;
   btn.disabled = false;
 }
@@ -712,4 +891,5 @@ async function handleAnalyzeClick() {
 window.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("analyze-btn");
   btn.addEventListener("click", handleAnalyzeClick);
+  refreshPendingProposals();
 });
