@@ -15,6 +15,13 @@ jobs:
           lfs: true
           fetch-depth: 0
 
+      - name: Debug repo contents
+        run: |
+          pwd
+          ls -la
+          echo "----- README.md -----"
+          sed -n '1,20p' README.md
+
       - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
