@@ -61,10 +61,10 @@ def split_into_paragraphs(text: str) -> List[str]:
     normalized = text.replace("\r\n", "\n").strip()
     if not normalized:
         return []
-    # Match frontend behavior: every newline starts a new paragraph; ignore empties.
+    # Match frontend behavior: paragraphs are separated by blank lines.
     out: List[str] = []
-    for line in normalized.split("\n"):
-        s = " ".join(line.split()).strip()
+    for block in normalized.split("\n\n"):
+        s = " ".join(block.split()).strip()
         if s:
             out.append(s)
     return out

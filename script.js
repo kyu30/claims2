@@ -252,15 +252,22 @@ async function loadClaimsData() {
   }
 }
 
-/** Paragraphs = blocks separated by line breaks (after normalizing newlines). */
+/** Paragraphs = blocks separated by blank lines (after normalizing newlines). */
 function splitIntoParagraphs(text) {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
   return normalized
-    // Treat each line as its own paragraph; ignore empty lines.
-    .split(/\n+/)
-    .map((p) => p.replace(/\s+/g, " ").trim())
+    // Paragraph boundary = one or more blank lines.
+    .split(/\n\s*\n+/)
+    .map((p) => p.trim())
     .filter(Boolean);
+}
+
+function normalizeForMatch(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function computeMatchConfidence(paragraphLower, snippetLower) {
@@ -510,7 +517,7 @@ function formatCollapseMeta(subclaimId, currentSuperclaimId) {
 function findBestMatchesForParagraph(paragraph) {
   if (!flattenedSnippets || flattenedSnippets.length === 0) return [];
 
-  const lowerParagraph = paragraph.toLowerCase();
+  const lowerParagraph = normalizeForMatch(paragraph);
 
   const candidates = flattenedSnippets
     .filter((s) => {
@@ -703,6 +710,11 @@ function getApiCandidates() {
   const out = [];
   const pushUnique = (v) => {
     if (v == null) return;
+    // Allow same-origin as an explicit empty-string base.
+    if (v === "") {
+      if (!out.includes("")) out.push("");
+      return;
+    }
     const s = String(v).trim().replace(/\/+$/, "");
     if (!s) return;
     if (!out.includes(s)) out.push(s);
@@ -720,11 +732,12 @@ function getApiCandidates() {
   const fromMeta = meta && meta.getAttribute("content");
   pushUnique(fromMeta);
 
-  // Same-origin first: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
+  // Same-origin first: static hosting can rewrite `/api/*` to a backend.
   pushUnique("");
 
-  // Dev: separate uvicorn port.
-  pushUnique("http://localhost:8001");
+  // Optional dev backend port (enable by setting meta/localStorage instead of always probing).
+  // - meta tag:   <meta name="claims-api-base" content="http://localhost:8001" />
+  // - console:    localStorage.setItem("CLAIMS_API_BASE", "http://localhost:8001")
 
   return out;
 }
