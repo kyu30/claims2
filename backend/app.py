@@ -16,7 +16,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from llm_confidence import score_subclaim_to_superclaim_confidence
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parent
 
 _DEFAULT_ENV_PATH = ROOT / ".env"
 load_dotenv(dotenv_path=str(_DEFAULT_ENV_PATH), override=False)
@@ -26,7 +26,7 @@ SUPERCLAIMS_PATH = ROOT / "greenwashing_superclaims.json"
 MAP_PATH = ROOT / "claim_superclaim_map.json"
 HISTORY_PATH = ROOT / "greenwashing_claim_history.json"
 
-APP_DATA_DIR = ROOT / "backend" / "data"
+APP_DATA_DIR = ROOT / "data"
 PROPOSALS_PATH = APP_DATA_DIR / "proposals.json"
 MERGES_PATH = APP_DATA_DIR / "merges.json"
 
