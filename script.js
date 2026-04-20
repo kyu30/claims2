@@ -700,11 +700,33 @@ function escapeHtml(s) {
 }
 
 function getApiCandidates() {
-  // Prefer same-origin (works if FastAPI serves the UI or you have a proxy).
-  // Fallback to localhost:8001 for the common "http.server :8000 + uvicorn :8001" dev setup.
-  const sameOrigin = "";
-  const localhost8001 = "http://localhost:8001";
-  return [sameOrigin, localhost8001];
+  const out = [];
+  const pushUnique = (v) => {
+    if (v == null) return;
+    const s = String(v).trim().replace(/\/+$/, "");
+    if (!s) return;
+    if (!out.includes(s)) out.push(s);
+  };
+
+  // Optional override for local file opens / non-Vercel static hosting.
+  try {
+    const fromStorage = localStorage.getItem("CLAIMS_API_BASE");
+    pushUnique(fromStorage);
+  } catch {
+    // ignore
+  }
+
+  const meta = document.querySelector('meta[name="claims-api-base"]');
+  const fromMeta = meta && meta.getAttribute("content");
+  pushUnique(fromMeta);
+
+  // Same-origin first: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
+  pushUnique("");
+
+  // Dev: separate uvicorn port.
+  pushUnique("http://localhost:8001");
+
+  return out;
 }
 
 function resolveApiUrl(base, path) {
