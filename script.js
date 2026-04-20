@@ -391,6 +391,9 @@ function formatCollapseMeta(subclaimId, currentSuperclaimId) {
       title: "",
     };
   }
+  // UI display rule: only show collapse *targets* when the offline hierarchy cosine
+  // similarity is above a minimum threshold. (We still show the score itself.)
+  const MIN_COLLAPSE_SIMILARITY = 0.6;
   const hier = formatHierarchyLine(row);
   const peersArtifact = (row.collapseWith || []).map(String);
   const peersMapped = superclaimMappingBySubclaim
@@ -439,6 +442,36 @@ function formatCollapseMeta(subclaimId, currentSuperclaimId) {
           ${labelBlock}
           <div class="collapse-stale-cluster-msg">
             The offline artifact lists ${peersArtifact.length} cluster peer subclaim${peersArtifact.length === 1 ? "" : "s"}, but none appear in your current <code>claim_superclaim_map</code>. Regenerate <code>subclaim_bertopic_collapse.json</code> or refresh the map so collapse targets stay in sync.
+          </div>
+        </div>
+      `,
+      title: titleBits.join(" · "),
+    };
+  }
+
+  if (
+    typeof row.hierarchyConfidence === "number" &&
+    Number.isFinite(row.hierarchyConfidence) &&
+    row.hierarchyConfidence < MIN_COLLAPSE_SIMILARITY
+  ) {
+    const labelBlock = label
+      ? `<div class="collapse-topic-label">${label}</div>`
+      : "";
+    const titleBits = [
+      hier.titlePart,
+      label ? `Topic label: ${row.topicLabel}` : "",
+      `Collapse suggestions hidden (similarity < ${MIN_COLLAPSE_SIMILARITY.toFixed(2)})`,
+    ].filter(Boolean);
+    return {
+      html: `
+        <div class="collapse-meta">
+          ${hier.html}
+          <span class="collapse-badge">Topic cluster</span>
+          ${labelBlock}
+          <div class="collapse-stale-cluster-msg">
+            Cluster peers exist, but collapse targets are hidden because the offline cosine similarity is below <strong>${MIN_COLLAPSE_SIMILARITY.toFixed(
+              2
+            )}</strong>.
           </div>
         </div>
       `,
