@@ -703,6 +703,11 @@ function getApiCandidates() {
   const out = [];
   const pushUnique = (v) => {
     if (v == null) return;
+    // Allow same-origin as an explicit empty-string base.
+    if (v === "") {
+      if (!out.includes("")) out.push("");
+      return;
+    }
     const s = String(v).trim().replace(/\/+$/, "");
     if (!s) return;
     if (!out.includes(s)) out.push(s);
@@ -720,11 +725,12 @@ function getApiCandidates() {
   const fromMeta = meta && meta.getAttribute("content");
   pushUnique(fromMeta);
 
-  // Same-origin first: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
+  // Same-origin first: static hosting can rewrite `/api/*` to a backend.
   pushUnique("");
 
-  // Dev: separate uvicorn port.
-  pushUnique("http://localhost:8001");
+  // Optional dev backend port (enable by setting meta/localStorage instead of always probing).
+  // - meta tag:   <meta name="claims-api-base" content="http://localhost:8001" />
+  // - console:    localStorage.setItem("CLAIMS_API_BASE", "http://localhost:8001")
 
   return out;
 }
