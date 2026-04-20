@@ -252,15 +252,22 @@ async function loadClaimsData() {
   }
 }
 
-/** Paragraphs = blocks separated by line breaks (after normalizing newlines). */
+/** Paragraphs = blocks separated by blank lines (after normalizing newlines). */
 function splitIntoParagraphs(text) {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
   return normalized
-    // Treat each line as its own paragraph; ignore empty lines.
-    .split(/\n+/)
-    .map((p) => p.replace(/\s+/g, " ").trim())
+    // Paragraph boundary = one or more blank lines.
+    .split(/\n\s*\n+/)
+    .map((p) => p.trim())
     .filter(Boolean);
+}
+
+function normalizeForMatch(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function computeMatchConfidence(paragraphLower, snippetLower) {
@@ -510,7 +517,7 @@ function formatCollapseMeta(subclaimId, currentSuperclaimId) {
 function findBestMatchesForParagraph(paragraph) {
   if (!flattenedSnippets || flattenedSnippets.length === 0) return [];
 
-  const lowerParagraph = paragraph.toLowerCase();
+  const lowerParagraph = normalizeForMatch(paragraph);
 
   const candidates = flattenedSnippets
     .filter((s) => {
