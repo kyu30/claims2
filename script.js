@@ -699,46 +699,82 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
+function getApiCandidates() {
+  // Prefer same-origin (works if FastAPI serves the UI or you have a proxy).
+  // Fallback to localhost:8001 for the common "http.server :8000 + uvicorn :8001" dev setup.
+  const sameOrigin = "";
+  const localhost8001 = "http://localhost:8001";
+  return [sameOrigin, localhost8001];
+}
+
+function resolveApiUrl(base, path) {
+  if (!path) return base || "";
+  if (/^https?:\/\//i.test(path)) return path;
+  const b = base || "";
+  if (!b) return path;
+  return `${b}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 async function postJson(url, body) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    // ignore
+  const bases = getApiCandidates();
+  let lastErr = null;
+  for (const base of bases) {
+    try {
+      const target = resolveApiUrl(base, url);
+      const res = await fetch(target, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // ignore
+      }
+      if (!res.ok) {
+        const msg =
+          (data && (data.detail || data.message)) ||
+          text ||
+          `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      return data;
+    } catch (e) {
+      lastErr = e;
+    }
   }
-  if (!res.ok) {
-    const msg =
-      (data && (data.detail || data.message)) ||
-      text ||
-      `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data;
+  throw lastErr || new Error("Request failed.");
 }
 
 async function getJson(url) {
-  const res = await fetch(url, { method: "GET" });
-  const text = await res.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    // ignore
+  const bases = getApiCandidates();
+  let lastErr = null;
+  for (const base of bases) {
+    try {
+      const target = resolveApiUrl(base, url);
+      const res = await fetch(target, { method: "GET" });
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // ignore
+      }
+      if (!res.ok) {
+        const msg =
+          (data && (data.detail || data.message)) ||
+          text ||
+          `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      return data;
+    } catch (e) {
+      lastErr = e;
+    }
   }
-  if (!res.ok) {
-    const msg =
-      (data && (data.detail || data.message)) ||
-      text ||
-      `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data;
+  throw lastErr || new Error("Request failed.");
 }
 
 function formatProposalTitle(p) {
