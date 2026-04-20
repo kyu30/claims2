@@ -36,6 +36,17 @@
 
     <section class="results-section">
       <h2>Pending taxonomy proposals (human approval)</h2>
+      <div class="reviewer-row">
+        <label for="reviewer-name" class="field-label">Reviewer name</label>
+        <input
+          id="reviewer-name"
+          class="text-input reviewer-input"
+          type="text"
+          maxlength="120"
+          placeholder="Your name (stored locally in this browser)"
+          autocomplete="name"
+        />
+      </div>
       <div id="proposals-container" class="results-container">
         <p class="placeholder">No pending proposals yet.</p>
       </div>

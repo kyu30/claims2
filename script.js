@@ -699,6 +699,61 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
+const REVIEWER_STORAGE_KEY = "CLAIMS_REVIEWER_NAME";
+
+function getReviewerName() {
+  const el = document.getElementById("reviewer-name");
+  const fromInput = el && el.value != null ? String(el.value).trim() : "";
+  if (fromInput) return fromInput;
+  try {
+    const fromStorage = localStorage.getItem(REVIEWER_STORAGE_KEY);
+    return fromStorage ? String(fromStorage).trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function persistReviewerName(name) {
+  const el = document.getElementById("reviewer-name");
+  if (el) el.value = name;
+  try {
+    localStorage.setItem(REVIEWER_STORAGE_KEY, name);
+  } catch {
+    // ignore
+  }
+}
+
+function requireReviewerName() {
+  const name = getReviewerName();
+  if (!name) {
+    alert("Please enter your reviewer name before approving, rejecting, or applying proposals.");
+    const el = document.getElementById("reviewer-name");
+    if (el) el.focus();
+    return null;
+  }
+  persistReviewerName(name);
+  return name;
+}
+
+function formatProposalMetaHtml(p) {
+  const bits = [];
+  if (p.reviewedBy) {
+    bits.push(
+      `<div class="proposal-line"><strong>Reviewed by:</strong> ${escapeHtml(
+        p.reviewedBy
+      )}</div>`
+    );
+  }
+  if (p.appliedBy) {
+    bits.push(
+      `<div class="proposal-line"><strong>Applied by:</strong> ${escapeHtml(
+        p.appliedBy
+      )}</div>`
+    );
+  }
+  return bits.length ? `<div class="proposal-meta">${bits.join("")}</div>` : "";
+}
+
 function getApiCandidates() {
   const out = [];
   const pushUnique = (v) => {
@@ -811,6 +866,53 @@ function formatProposalTitle(p) {
 
 function formatProposalBodyHtml(p) {
   const payload = p.payload || {};
+  if (p.type === "merge_subclaims") {
+    const ids = Array.isArray(payload.mergeSubclaimIds)
+      ? payload.mergeSubclaimIds.map((x) => String(x)).join(", ")
+      : "";
+    const cos =
+      typeof payload.pairCosine === "number"
+        ? `<div class="proposal-line"><strong>Pair cosine (TF‑IDF):</strong> ${payload.pairCosine.toFixed(
+            3
+          )}</div>`
+        : "";
+    return `
+      <div class="proposal-line"><strong>Canonical:</strong> <code>${escapeHtml(
+        payload.canonicalSubclaimId || ""
+      )}</code></div>
+      <div class="proposal-line"><strong>Remove:</strong> <code>${escapeHtml(
+        payload.removeSubclaimId || ""
+      )}</code></div>
+      <div class="proposal-line"><strong>Group:</strong> <code>${escapeHtml(ids)}</code></div>
+      <div class="proposal-line"><strong>Shared superclaim:</strong> <code>${escapeHtml(
+        payload.sharedSuperclaimId || ""
+      )}</code></div>
+      ${cos}
+      ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
+    `;
+  }
+  if (p.type === "merge_superclaims") {
+    const ids = Array.isArray(payload.mergeSuperclaimIds)
+      ? payload.mergeSuperclaimIds.map((x) => String(x)).join(", ")
+      : "";
+    const cos =
+      typeof payload.pairCosine === "number"
+        ? `<div class="proposal-line"><strong>Pair cosine (TF‑IDF):</strong> ${payload.pairCosine.toFixed(
+            3
+          )}</div>`
+        : "";
+    return `
+      <div class="proposal-line"><strong>Canonical:</strong> <code>${escapeHtml(
+        payload.canonicalSuperclaimId || ""
+      )}</code></div>
+      <div class="proposal-line"><strong>Remove:</strong> <code>${escapeHtml(
+        payload.removeSuperclaimId || ""
+      )}</code></div>
+      <div class="proposal-line"><strong>Group:</strong> <code>${escapeHtml(ids)}</code></div>
+      ${cos}
+      ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
+    `;
+  }
   if (p.type === "new_subclaim") {
     const sc = payload.suggestedSuperclaimId
       ? `<div class="proposal-line"><strong>Suggested superclaim:</strong> <code>${escapeHtml(
@@ -878,7 +980,7 @@ async function refreshPendingProposals() {
         <div class="proposal-id"><code>${escapeHtml(p.id || "")}</code></div>
       </header>
       <div class="proposal-paragraph">${escapeHtml(p.paragraph || "")}</div>
-      <div class="proposal-body">${formatProposalBodyHtml(p)}</div>
+      <div class="proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
       <div class="proposal-actions">
         <button class="action-btn" data-action="approve" data-id="${escapeHtmlAttr(
           p.id || ""
@@ -906,7 +1008,14 @@ async function refreshPendingProposals() {
 
       el.disabled = true;
       try {
-        await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {});
+        const reviewer = requireReviewerName();
+        if (!reviewer) {
+          el.disabled = false;
+          return;
+        }
+        await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
+          reviewer_name: reviewer,
+        });
         // Applying should also refresh claims data next run; for now just refresh the list.
         await refreshPendingProposals();
       } catch (e) {
@@ -982,5 +1091,20 @@ async function handleAnalyzeClick() {
 window.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("analyze-btn");
   btn.addEventListener("click", handleAnalyzeClick);
+
+  const reviewerEl = document.getElementById("reviewer-name");
+  if (reviewerEl) {
+    try {
+      const saved = localStorage.getItem(REVIEWER_STORAGE_KEY);
+      if (saved) reviewerEl.value = saved;
+    } catch {
+      // ignore
+    }
+    reviewerEl.addEventListener("change", () => {
+      const v = String(reviewerEl.value || "").trim();
+      if (v) persistReviewerName(v);
+    });
+  }
+
   refreshPendingProposals();
 });

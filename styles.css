@@ -118,6 +118,16 @@ body {
   transform: translateY(-1px);
 }
 
+.reviewer-row {
+  margin: 10px 0 12px;
+}
+
+.reviewer-input {
+  min-height: 0;
+  max-height: none;
+  padding: 10px 12px;
+}
+
 .controls {
   display: flex;
   align-items: center;
