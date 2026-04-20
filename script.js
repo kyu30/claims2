@@ -870,6 +870,32 @@ function formatProposalBodyHtml(p) {
     const ids = Array.isArray(payload.mergeSubclaimIds)
       ? payload.mergeSubclaimIds.map((x) => String(x)).join(", ")
       : "";
+    const canonText = String(payload.canonicalSubclaimText || "").trim();
+    const removeText = String(payload.removeSubclaimText || "").trim();
+    const mergeTexts =
+      canonText || removeText
+        ? `<div class="proposal-merge-claims">
+            <div class="proposal-merge-claim"><span class="proposal-merge-label">Keep (canonical)</span><div class="proposal-merge-body">${escapeHtml(
+              canonText || "(no text in payload)"
+            )}</div><code class="proposal-merge-id">${escapeHtml(
+              payload.canonicalSubclaimId || ""
+            )}</code></div>
+            <div class="proposal-merge-claim"><span class="proposal-merge-label">Merge away</span><div class="proposal-merge-body">${escapeHtml(
+              removeText || "(no text in payload)"
+            )}</div><code class="proposal-merge-id">${escapeHtml(
+              payload.removeSubclaimId || ""
+            )}</code></div>
+          </div>`
+        : "";
+    const idLines =
+      mergeTexts === ""
+        ? `<div class="proposal-line"><strong>Canonical:</strong> <code>${escapeHtml(
+            payload.canonicalSubclaimId || ""
+          )}</code></div>
+          <div class="proposal-line"><strong>Remove:</strong> <code>${escapeHtml(
+            payload.removeSubclaimId || ""
+          )}</code></div>`
+        : "";
     const cos =
       typeof payload.pairCosine === "number"
         ? `<div class="proposal-line"><strong>Pair cosine (TF‑IDF):</strong> ${payload.pairCosine.toFixed(
@@ -877,12 +903,8 @@ function formatProposalBodyHtml(p) {
           )}</div>`
         : "";
     return `
-      <div class="proposal-line"><strong>Canonical:</strong> <code>${escapeHtml(
-        payload.canonicalSubclaimId || ""
-      )}</code></div>
-      <div class="proposal-line"><strong>Remove:</strong> <code>${escapeHtml(
-        payload.removeSubclaimId || ""
-      )}</code></div>
+      ${mergeTexts}
+      ${idLines}
       <div class="proposal-line"><strong>Group:</strong> <code>${escapeHtml(ids)}</code></div>
       <div class="proposal-line"><strong>Shared superclaim:</strong> <code>${escapeHtml(
         payload.sharedSuperclaimId || ""
@@ -895,6 +917,32 @@ function formatProposalBodyHtml(p) {
     const ids = Array.isArray(payload.mergeSuperclaimIds)
       ? payload.mergeSuperclaimIds.map((x) => String(x)).join(", ")
       : "";
+    const canonText = String(payload.canonicalSuperclaimText || "").trim();
+    const removeText = String(payload.removeSuperclaimText || "").trim();
+    const mergeTexts =
+      canonText || removeText
+        ? `<div class="proposal-merge-claims">
+            <div class="proposal-merge-claim"><span class="proposal-merge-label">Keep (canonical)</span><div class="proposal-merge-body">${escapeHtml(
+              canonText || "(no text in payload)"
+            )}</div><code class="proposal-merge-id">${escapeHtml(
+              payload.canonicalSuperclaimId || ""
+            )}</code></div>
+            <div class="proposal-merge-claim"><span class="proposal-merge-label">Merge away</span><div class="proposal-merge-body">${escapeHtml(
+              removeText || "(no text in payload)"
+            )}</div><code class="proposal-merge-id">${escapeHtml(
+              payload.removeSuperclaimId || ""
+            )}</code></div>
+          </div>`
+        : "";
+    const idLines =
+      mergeTexts === ""
+        ? `<div class="proposal-line"><strong>Canonical:</strong> <code>${escapeHtml(
+            payload.canonicalSuperclaimId || ""
+          )}</code></div>
+          <div class="proposal-line"><strong>Remove:</strong> <code>${escapeHtml(
+            payload.removeSuperclaimId || ""
+          )}</code></div>`
+        : "";
     const cos =
       typeof payload.pairCosine === "number"
         ? `<div class="proposal-line"><strong>Pair cosine (TF‑IDF):</strong> ${payload.pairCosine.toFixed(
@@ -902,12 +950,8 @@ function formatProposalBodyHtml(p) {
           )}</div>`
         : "";
     return `
-      <div class="proposal-line"><strong>Canonical:</strong> <code>${escapeHtml(
-        payload.canonicalSuperclaimId || ""
-      )}</code></div>
-      <div class="proposal-line"><strong>Remove:</strong> <code>${escapeHtml(
-        payload.removeSuperclaimId || ""
-      )}</code></div>
+      ${mergeTexts}
+      ${idLines}
       <div class="proposal-line"><strong>Group:</strong> <code>${escapeHtml(ids)}</code></div>
       ${cos}
       ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
@@ -924,9 +968,6 @@ function formatProposalBodyHtml(p) {
         ? `<div class="proposal-line"><strong>LLM confidence:</strong> ${(payload.confidence * 100).toFixed(0)}%</div>`
         : "";
     return `
-      <div class="proposal-line"><strong>Subclaim text:</strong> ${escapeHtml(
-        payload.subclaimText || ""
-      )}</div>
       ${sc}
       ${conf}
       ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}

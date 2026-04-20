@@ -602,6 +602,40 @@ body {
   border: 1px solid rgba(51, 65, 85, 0.7);
 }
 
+.proposal-merge-claims {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.proposal-merge-claim {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.55);
+}
+
+.proposal-merge-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.proposal-merge-body {
+  font-size: 13px;
+  color: #e5e7eb;
+  line-height: 1.45;
+  margin-bottom: 6px;
+}
+
+.proposal-merge-id {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .proposal-line {
   font-size: 12px;
   color: var(--text-muted);
