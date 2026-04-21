@@ -1,6 +1,6 @@
 """
-Vercel FastAPI entrypoint: exposes the `app` ASGI instance from `backend/app.py`.
-See https://vercel.com/docs/frameworks/backend/fastapi
+Vercel FastAPI entrypoint (official pattern: root `main.py` exporting `app`).
+Implementation lives in `backend/app.py`.
 """
 from __future__ import annotations
 
