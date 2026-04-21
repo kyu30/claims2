@@ -17,7 +17,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from llm_confidence import score_subclaim_to_superclaim_confidence, suggest_original_superclaim_text
 
 
-ROOT = Path(__file__).resolve().parent
+# Repo root (parent of `backend/`) — claim JSON lives next to `backend/`, not inside it.
+ROOT = Path(__file__).resolve().parent.parent
 
 _DEFAULT_ENV_PATH = ROOT / ".env"
 load_dotenv(dotenv_path=str(_DEFAULT_ENV_PATH), override=False)
