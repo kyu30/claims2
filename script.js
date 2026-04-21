@@ -756,29 +756,52 @@ function formatProposalMetaHtml(p) {
 
 function getApiCandidates() {
   const out = [];
+  /** @param {string|null|undefined} v */
   const pushUnique = (v) => {
+    if (v === "") {
+      if (!out.includes("")) out.push("");
+      return;
+    }
     if (v == null) return;
     const s = String(v).trim().replace(/\/+$/, "");
     if (!s) return;
     if (!out.includes(s)) out.push(s);
   };
 
-  // Optional override for local file opens / non-Vercel static hosting.
+  const host =
+    typeof window !== "undefined" && window.location && window.location.hostname
+      ? window.location.hostname
+      : "";
+  const isDevHost = host === "localhost" || host === "127.0.0.1";
+  const isLocalApiUrl = (base) =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(String(base || "").trim());
+
+  const meta = document.querySelector('meta[name="claims-api-base"]');
+  const fromMeta = meta && meta.getAttribute("content");
+
+  // Deployed HTTPS (e.g. Vercel): same-origin `/api/*` rewrites must be tried; do not let a stale
+  // localhost-only list skip them (empty string was previously dropped by pushUnique).
+  if (!isDevHost && typeof window !== "undefined" && window.location.protocol === "https:") {
+    pushUnique("");
+  }
+
   try {
     const fromStorage = localStorage.getItem("CLAIMS_API_BASE");
-    pushUnique(fromStorage);
+    if (fromStorage != null && String(fromStorage).trim() !== "") {
+      if (!isLocalApiUrl(fromStorage) || isDevHost) {
+        pushUnique(fromStorage);
+      }
+    }
   } catch {
     // ignore
   }
 
-  const meta = document.querySelector('meta[name="claims-api-base"]');
-  const fromMeta = meta && meta.getAttribute("content");
   pushUnique(fromMeta);
 
-  // Same-origin first: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
+  // Same-origin: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
   pushUnique("");
 
-  // Dev: separate uvicorn port.
+  // Dev: separate uvicorn port (last on production so rewrite wins).
   pushUnique("http://localhost:8001");
 
   return out;
@@ -800,6 +823,7 @@ async function postJson(url, body) {
       const target = resolveApiUrl(base, url);
       const res = await fetch(target, {
         method: "POST",
+        credentials: "omit",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -819,7 +843,13 @@ async function postJson(url, body) {
       }
       return data;
     } catch (e) {
-      lastErr = e;
+      const target = resolveApiUrl(base, url);
+      const msg = e && e.message ? String(e.message) : String(e);
+      lastErr = new Error(
+        msg === "Failed to fetch"
+          ? `Failed to fetch (${target}). Check network, CORS, or clear localStorage key CLAIMS_API_BASE if it points at localhost.`
+          : `${msg} (${target})`
+      );
     }
   }
   throw lastErr || new Error("Request failed.");
@@ -831,7 +861,7 @@ async function getJson(url) {
   for (const base of bases) {
     try {
       const target = resolveApiUrl(base, url);
-      const res = await fetch(target, { method: "GET" });
+      const res = await fetch(target, { method: "GET", credentials: "omit" });
       const text = await res.text();
       let data = null;
       try {
@@ -848,7 +878,13 @@ async function getJson(url) {
       }
       return data;
     } catch (e) {
-      lastErr = e;
+      const target = resolveApiUrl(base, url);
+      const msg = e && e.message ? String(e.message) : String(e);
+      lastErr = new Error(
+        msg === "Failed to fetch"
+          ? `Failed to fetch (${target}). Check network, CORS, or clear localStorage key CLAIMS_API_BASE if it points at localhost.`
+          : `${msg} (${target})`
+      );
     }
   }
   throw lastErr || new Error("Request failed.");
