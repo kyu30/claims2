@@ -1,16 +1,10 @@
 """
-Vercel FastAPI entrypoint (official pattern: root `main.py` exporting `app`).
-Implementation lives in `backend/app.py`.
+Vercel FastAPI entry: import the ASGI app as a real package so the bundler
+includes ``backend/`` (dynamic ``sys.path`` hacks are not traced on deploy).
+Local: ``uvicorn main:app`` or ``uvicorn backend.app:app`` from repo root.
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-_backend = Path(__file__).resolve().parent / "backend"
-if _backend.is_dir() and str(_backend) not in sys.path:
-    sys.path.insert(0, str(_backend))
-
-from app import app  # noqa: E402
+from backend.app import app
 
 __all__ = ["app"]

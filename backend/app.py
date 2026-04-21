@@ -14,7 +14,17 @@ from pydantic import BaseModel, Field
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from llm_confidence import score_subclaim_to_superclaim_confidence, suggest_original_superclaim_text
+try:
+    from .llm_confidence import (
+        score_subclaim_to_superclaim_confidence,
+        suggest_original_superclaim_text,
+    )
+except ImportError:
+    # `cd backend && uvicorn app:app` (legacy local): no package parent.
+    from llm_confidence import (
+        score_subclaim_to_superclaim_confidence,
+        suggest_original_superclaim_text,
+    )
 
 
 # Repo root (parent of `backend/`) — claim JSON lives next to `backend/`, not inside it.
