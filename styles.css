@@ -602,6 +602,39 @@ body {
   border: 1px solid rgba(51, 65, 85, 0.7);
 }
 
+.proposal-section {
+  margin-bottom: 10px;
+}
+
+.proposal-section-heading {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 5px;
+}
+
+.proposal-section-body {
+  font-size: 13px;
+  color: #e5e7eb;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.proposal-section-body--superclaim {
+  background: rgba(30, 27, 75, 0.35);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.proposal-card > .proposal-body {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(51, 65, 85, 0.55);
+}
+
 .proposal-merge-claims {
   display: grid;
   gap: 10px;

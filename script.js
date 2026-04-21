@@ -997,6 +997,22 @@ async function getJson(url) {
   throw lastErr || new Error("Request failed.");
 }
 
+function formatNewSuperclaimSectionsHtml(p) {
+  const article = escapeHtml(p.paragraph || "");
+  const payload = p.payload || {};
+  const scText = escapeHtml(String(payload.superclaimText || "").trim());
+  return `
+    <div class="proposal-section">
+      <div class="proposal-section-heading">Article</div>
+      <div class="proposal-section-body">${article}</div>
+    </div>
+    <div class="proposal-section">
+      <div class="proposal-section-heading">Suggested original superclaim</div>
+      <div class="proposal-section-body proposal-section-body--superclaim">${scText}</div>
+    </div>
+  `;
+}
+
 function formatProposalTitle(p) {
   const type = p.type || "";
   if (type === "new_subclaim") return "New subclaim";
@@ -1127,13 +1143,13 @@ function formatProposalBodyHtml(p) {
             String(payload.nearbySuperclaimId)
           )}</code>${payload.nearbySuperclaimText ? ` — ${escapeHtml(String(payload.nearbySuperclaimText))}` : ""}</div>`
         : "";
+    const reason = p.rationale
+      ? `<div class="proposal-line proposal-reason"><strong>Reasoning:</strong> ${escapeHtml(p.rationale)}</div>`
+      : "";
     return `
-      <div class="proposal-line"><strong>Suggested original superclaim:</strong> ${escapeHtml(
-        payload.superclaimText || ""
-      )}</div>
       ${conf}
       ${near}
-      ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
+      ${reason}
     `;
   }
   return `
@@ -1172,12 +1188,17 @@ async function refreshPendingProposals() {
     if (p && p.id) byId.set(String(p.id), p);
     const card = document.createElement("article");
     card.className = "proposal-card";
+    const isNewSuperclaim = p.type === "new_superclaim";
+    const topSections = isNewSuperclaim
+      ? formatNewSuperclaimSectionsHtml(p)
+      : `<div class="proposal-paragraph">${escapeHtml(p.paragraph || "")}</div>`;
+
     card.innerHTML = `
       <header class="proposal-header">
         <div class="proposal-title">${escapeHtml(formatProposalTitle(p))}</div>
         <div class="proposal-id"><code>${escapeHtml(p.id || "")}</code></div>
       </header>
-      <div class="proposal-paragraph">${escapeHtml(p.paragraph || "")}</div>
+      ${topSections}
       <div class="proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
       <div class="proposal-actions">
         <button class="action-btn" data-action="approve" data-id="${escapeHtmlAttr(
