@@ -881,9 +881,14 @@ function getApiCandidates() {
   const meta = document.querySelector('meta[name="claims-api-base"]');
   const fromMeta = meta && meta.getAttribute("content");
 
-  // Deployed site (any non-loopback host): try same-origin `/api/*` rewrites before overrides.
-  if (!isDevHost && typeof window !== "undefined") {
+  // 1) Same-origin `/api/*` (Vercel rewrites, or a dev proxy) — always try first in the browser.
+  if (typeof window !== "undefined") {
     pushUnique("");
+  }
+
+  // 2) Local uvicorn before any hardcoded remote meta/storage so localhost dev is not blocked by a dead URL.
+  if (isDevHost) {
+    pushUnique("http://localhost:8001");
   }
 
   try {
@@ -901,14 +906,6 @@ function getApiCandidates() {
     if (!isLocalApiUrl(fromMeta) || isDevHost) {
       pushUnique(fromMeta);
     }
-  }
-
-  // Same-origin: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
-  pushUnique("");
-
-  // Local dev only: browser on localhost/127.0.0.1 talking to uvicorn on :8001.
-  if (isDevHost) {
-    pushUnique("http://localhost:8001");
   }
 
   return out;
@@ -954,7 +951,7 @@ async function postJson(url, body) {
       const msg = e && e.message ? String(e.message) : String(e);
       lastErr = new Error(
         msg === "Failed to fetch"
-          ? `Failed to fetch (${target}). Check network, CORS, or clear localStorage key CLAIMS_API_BASE if it points at localhost.`
+          ? `Failed to fetch (${target}). Confirm the API is deployed (open /api/health in a tab), CORS allows this origin, and meta claims-api-base / localStorage CLAIMS_API_BASE are correct or cleared.`
           : `${msg} (${target})`
       );
     }
@@ -989,7 +986,7 @@ async function getJson(url) {
       const msg = e && e.message ? String(e.message) : String(e);
       lastErr = new Error(
         msg === "Failed to fetch"
-          ? `Failed to fetch (${target}). Check network, CORS, or clear localStorage key CLAIMS_API_BASE if it points at localhost.`
+          ? `Failed to fetch (${target}). Confirm the API is deployed (open /api/health in a tab), CORS allows this origin, and meta claims-api-base / localStorage CLAIMS_API_BASE are correct or cleared.`
           : `${msg} (${target})`
       );
     }
