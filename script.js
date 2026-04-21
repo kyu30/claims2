@@ -779,9 +779,8 @@ function getApiCandidates() {
   const meta = document.querySelector('meta[name="claims-api-base"]');
   const fromMeta = meta && meta.getAttribute("content");
 
-  // Deployed HTTPS (e.g. Vercel): same-origin `/api/*` rewrites must be tried; do not let a stale
-  // localhost-only list skip them (empty string was previously dropped by pushUnique).
-  if (!isDevHost && typeof window !== "undefined" && window.location.protocol === "https:") {
+  // Deployed site (any non-loopback host): try same-origin `/api/*` rewrites before overrides.
+  if (!isDevHost && typeof window !== "undefined") {
     pushUnique("");
   }
 
@@ -796,13 +795,19 @@ function getApiCandidates() {
     // ignore
   }
 
-  pushUnique(fromMeta);
+  if (fromMeta != null && String(fromMeta).trim() !== "") {
+    if (!isLocalApiUrl(fromMeta) || isDevHost) {
+      pushUnique(fromMeta);
+    }
+  }
 
   // Same-origin: Vercel `vercel.json` can rewrite `/api/*` to the backend deployment.
   pushUnique("");
 
-  // Dev: separate uvicorn port (last on production so rewrite wins).
-  pushUnique("http://localhost:8001");
+  // Local dev only: browser on localhost/127.0.0.1 talking to uvicorn on :8001.
+  if (isDevHost) {
+    pushUnique("http://localhost:8001");
+  }
 
   return out;
 }
