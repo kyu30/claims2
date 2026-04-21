@@ -5,8 +5,12 @@
   <title>Native Ads Claim Mapping</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Optional: set to your deployed API origin when not using a same-origin /api rewrite (e.g. file:// or custom static hosting). Example: https://claims-backend-sigma.vercel.app -->
-  <meta name="claims-api-base" content="" />
+  <meta name="claims-api-base" content="https://claims-backend-sigma.vercel.app" />
+  <!-- Optional: enable browser write access to Supabase taxonomy tables -->
+  <meta name="supabase-url" content="" />
+  <meta name="supabase-anon-key" content="" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <main class="app">

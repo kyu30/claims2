@@ -701,6 +701,108 @@ function escapeHtml(s) {
 
 const REVIEWER_STORAGE_KEY = "CLAIMS_REVIEWER_NAME";
 
+function getSupabaseConfig() {
+  const metaUrl = document.querySelector('meta[name="supabase-url"]');
+  const metaKey = document.querySelector('meta[name="supabase-anon-key"]');
+  const url = (metaUrl && metaUrl.getAttribute("content")) || "";
+  const key = (metaKey && metaKey.getAttribute("content")) || "";
+  return { url: String(url || "").trim(), key: String(key || "").trim() };
+}
+
+function getSupabaseClient() {
+  const cfg = getSupabaseConfig();
+  if (!cfg.url || !cfg.key) return null;
+  if (typeof window === "undefined") return null;
+  if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
+  try {
+    return window.supabase.createClient(cfg.url, cfg.key);
+  } catch {
+    return null;
+  }
+}
+
+function nextIdFromRows(rows, prefix) {
+  let max = 0;
+  for (const r of rows || []) {
+    const id = String(r?.id || "");
+    if (!id.startsWith(prefix)) continue;
+    const n = parseInt(id.slice(prefix.length), 10);
+    if (!Number.isNaN(n)) max = Math.max(max, n);
+  }
+  return `${prefix}${max + 1}`;
+}
+
+async function applyProposalToSupabaseTaxonomy(p) {
+  const sb = getSupabaseClient();
+  if (!sb) throw new Error("Supabase taxonomy config missing (set meta supabase-url and supabase-anon-key).");
+
+  const type = String(p?.type || "");
+  const payload = p?.payload || {};
+
+  if (type === "new_superclaim") {
+    const text = String(payload.superclaimText || "").trim();
+    if (!text) throw new Error("Missing superclaimText");
+
+    const { data: existing, error: selErr } = await sb
+      .from("taxonomy_superclaims")
+      .select("id")
+      .order("id", { ascending: false });
+    if (selErr) throw new Error(selErr.message || String(selErr));
+
+    const newId = nextIdFromRows(existing || [], "SC_");
+    const { error: insErr } = await sb.from("taxonomy_superclaims").insert({ id: newId, text });
+    if (insErr) throw new Error(insErr.message || String(insErr));
+    return;
+  }
+
+  if (type === "merge_subclaims") {
+    const canonical = String(payload.canonicalSubclaimId || "").trim();
+    const remove = String(payload.removeSubclaimId || "").trim();
+    if (!canonical || !remove || canonical === remove) throw new Error("Missing canonical/remove subclaim ids");
+
+    const { data: rows, error } = await sb
+      .from("taxonomy_subclaims")
+      .select("id,superclaim_id")
+      .in("id", [canonical, remove]);
+    if (error) throw new Error(error.message || String(error));
+    const canonRow = (rows || []).find((r) => String(r.id) === canonical);
+    const remRow = (rows || []).find((r) => String(r.id) === remove);
+    if (!canonRow || !remRow) throw new Error("Unknown subclaim id(s) in taxonomy_subclaims");
+    if (String(canonRow.superclaim_id) !== String(remRow.superclaim_id)) {
+      throw new Error("Refusing merge: subclaims are not mapped to the same superclaim.");
+    }
+
+    const { error: delErr } = await sb.from("taxonomy_subclaims").delete().eq("id", remove);
+    if (delErr) throw new Error(delErr.message || String(delErr));
+    return;
+  }
+
+  if (type === "merge_superclaims") {
+    const canonical = String(payload.canonicalSuperclaimId || "").trim();
+    const remove = String(payload.removeSuperclaimId || "").trim();
+    if (!canonical || !remove || canonical === remove) throw new Error("Missing canonical/remove superclaim ids");
+
+    const { data: rows, error } = await sb
+      .from("taxonomy_superclaims")
+      .select("id")
+      .in("id", [canonical, remove]);
+    if (error) throw new Error(error.message || String(error));
+    if (!Array.isArray(rows) || rows.length !== 2) throw new Error("Unknown superclaim id(s) in taxonomy_superclaims");
+
+    const { error: updErr } = await sb
+      .from("taxonomy_subclaims")
+      .update({ superclaim_id: canonical })
+      .eq("superclaim_id", remove);
+    if (updErr) throw new Error(updErr.message || String(updErr));
+
+    const { error: delErr } = await sb.from("taxonomy_superclaims").delete().eq("id", remove);
+    if (delErr) throw new Error(delErr.message || String(delErr));
+    return;
+  }
+
+  throw new Error(`Unsupported proposal type for browser taxonomy apply: ${type}`);
+}
+
 function getReviewerName() {
   const el = document.getElementById("reviewer-name");
   const fromInput = el && el.value != null ? String(el.value).trim() : "";
@@ -1064,8 +1166,10 @@ async function refreshPendingProposals() {
 
   const wrap = document.createElement("div");
   wrap.className = "proposal-list";
+  const byId = new Map();
 
   proposals.forEach((p) => {
+    if (p && p.id) byId.set(String(p.id), p);
     const card = document.createElement("article");
     card.className = "proposal-card";
     card.innerHTML = `
@@ -1107,9 +1211,19 @@ async function refreshPendingProposals() {
           el.disabled = false;
           return;
         }
-        await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
-          reviewer_name: reviewer,
-        });
+        if (action === "apply" && getSupabaseClient()) {
+          const p = byId.get(String(id));
+          if (!p) throw new Error("Missing proposal payload in UI.");
+          await applyProposalToSupabaseTaxonomy(p);
+          await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
+            reviewer_name: reviewer,
+            skip_taxonomy_update: true,
+          });
+        } else {
+          await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
+            reviewer_name: reviewer,
+          });
+        }
         // Applying should also refresh claims data next run; for now just refresh the list.
         await refreshPendingProposals();
       } catch (e) {
