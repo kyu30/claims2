@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from llm_confidence import score_subclaim_to_superclaim_confidence
+from llm_confidence import score_subclaim_to_superclaim_confidence, suggest_original_superclaim_text
 
 
 ROOT = Path(__file__).resolve().parent
@@ -289,6 +289,77 @@ def _existing_superclaim_text_keys(superclaims: Dict[str, str]) -> set[str]:
     return keys
 
 
+def _max_tfidf_cosine_to_texts(query: str, corpus: List[str]) -> float:
+    """Highest TF‑IDF cosine similarity between query and each corpus string (0.0 if unusable)."""
+    q = str(query or "").strip()
+    rows = [t for t in corpus if str(t).strip()]
+    if not q or not rows:
+        return 0.0
+    try:
+        vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), max_features=5000)
+        X = vec.fit_transform([q] + rows)
+        sims = cosine_similarity(X[0:1], X[1:])[0]
+        return float(max(sims)) if len(sims) else 0.0
+    except Exception:
+        return 0.0
+
+
+def _is_acceptable_new_superclaim_draft(
+    draft: str,
+    *,
+    superclaims: Dict[str, str],
+    existing_keys: set[str],
+    max_len: int = 220,
+    max_cosine_to_existing: float = 0.92,
+) -> bool:
+    s = " ".join(str(draft or "").split()).strip()
+    if not s or len(s) > max_len:
+        return False
+    if _normalized_superclaim_text_key(s) in existing_keys:
+        return False
+    values = [str(v) for v in superclaims.values() if str(v).strip()]
+    if values and _max_tfidf_cosine_to_texts(s, values) > max_cosine_to_existing:
+        return False
+    return True
+
+
+def _draft_new_superclaim_for_paragraph(
+    paragraph: str,
+    *,
+    superclaims: Dict[str, str],
+    existing_keys: set[str],
+    weak_sub: str | None = None,
+    weak_super: str | None = None,
+) -> str:
+    """
+    Prefer an LLM-suggested original taxonomy label; fall back to a trimmed paragraph line
+    only when it passes duplicate / near-duplicate checks (e.g. no API key).
+    """
+    ordered = sorted(
+        (str(v).strip() for v in superclaims.values() if str(v).strip()),
+        key=len,
+        reverse=True,
+    )
+
+    llm_draft = suggest_original_superclaim_text(
+        paragraph=paragraph,
+        existing_superclaim_texts=ordered,
+        weak_match_subclaim_text=weak_sub,
+        weak_match_superclaim_text=weak_super,
+    )
+    if llm_draft and _is_acceptable_new_superclaim_draft(
+        llm_draft, superclaims=superclaims, existing_keys=existing_keys
+    ):
+        return llm_draft[:220].rstrip()
+
+    fallback = _paragraph_as_new_superclaim_text(paragraph, max_len=220)
+    if fallback and _is_acceptable_new_superclaim_draft(
+        fallback, superclaims=superclaims, existing_keys=existing_keys, max_cosine_to_existing=0.97
+    ):
+        return fallback
+    return ""
+
+
 def _tfidf_topk(query: str, items: List[Tuple[str, str]], k: int = 8) -> List[Tuple[str, str, float]]:
     if not items:
         return []
@@ -546,21 +617,25 @@ def _llm_suggest_mapping(
     """
     Minimal “B” behavior:
     - Pick best existing (subclaim, superclaim) by TF‑IDF and then verify with LLM confidence scorer.
-    - If LLM confidence is low, propose a **new_superclaim** draft from the paragraph when that text is
-      not already present in greenwashing_superclaims.json (normalized match).
+    - If LLM confidence is low, propose a **new_superclaim**: an LLM-suggested original taxonomy label
+      that does not duplicate or closely match existing superclaims (normalized + TF‑IDF checks).
     - Propose merges using TF‑IDF cosine similarity between top candidate texts (subclaims and superclaims).
     """
     proposals: List[Tuple[ProposalType, Dict[str, Any], str]] = []
     existing_sc_keys = _existing_superclaim_text_keys(superclaims)
 
     if not sub_candidates or not super_candidates:
-        draft = _paragraph_as_new_superclaim_text(paragraph, max_len=280)
-        if draft and _normalized_superclaim_text_key(draft) not in existing_sc_keys:
+        draft = _draft_new_superclaim_for_paragraph(
+            paragraph,
+            superclaims=superclaims,
+            existing_keys=existing_sc_keys,
+        )
+        if draft:
             proposals.append(
                 (
                     "new_superclaim",
                     {"superclaimText": draft},
-                    "No existing taxonomy candidates available.",
+                    "No existing taxonomy candidates available; suggested original superclaim label.",
                 )
             )
         return ([], proposals)
@@ -696,9 +771,15 @@ def _llm_suggest_mapping(
             proposals,
         )
 
-    # Low confidence: propose a new superclaim line (original vs. greenwashing_superclaims.json), not a new NC_ under SC_*.
-    draft = _paragraph_as_new_superclaim_text(paragraph, max_len=400)
-    if draft and _normalized_superclaim_text_key(draft) not in existing_sc_keys:
+    # Low confidence: suggest a new original superclaim line (not a new NC_ under SC_*).
+    draft = _draft_new_superclaim_for_paragraph(
+        paragraph,
+        superclaims=superclaims,
+        existing_keys=existing_sc_keys,
+        weak_sub=best_sub_text,
+        weak_super=best_super_text,
+    )
+    if draft:
         proposals.append(
             (
                 "new_superclaim",
@@ -713,7 +794,7 @@ def _llm_suggest_mapping(
                     "verdict": verdict,
                 },
                 reason
-                or "Low confidence mapping; propose adding a new superclaim not already in the taxonomy.",
+                or "Low confidence mapping; suggested original superclaim not represented in the taxonomy.",
             )
         )
     return ([], proposals)

@@ -1000,7 +1000,7 @@ async function getJson(url) {
 function formatProposalTitle(p) {
   const type = p.type || "";
   if (type === "new_subclaim") return "New subclaim";
-  if (type === "new_superclaim") return "New superclaim";
+  if (type === "new_superclaim") return "Suggested original superclaim";
   if (type === "link_subclaim_to_superclaim") return "Remap subclaim → superclaim";
   if (type === "merge_subclaims") return "Merge subclaims";
   if (type === "merge_superclaims") return "Merge superclaims";
@@ -1128,7 +1128,7 @@ function formatProposalBodyHtml(p) {
           )}</code>${payload.nearbySuperclaimText ? ` — ${escapeHtml(String(payload.nearbySuperclaimText))}` : ""}</div>`
         : "";
     return `
-      <div class="proposal-line"><strong>Superclaim text:</strong> ${escapeHtml(
+      <div class="proposal-line"><strong>Suggested original superclaim:</strong> ${escapeHtml(
         payload.superclaimText || ""
       )}</div>
       ${conf}
