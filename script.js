@@ -974,10 +974,22 @@ function formatProposalBodyHtml(p) {
     `;
   }
   if (p.type === "new_superclaim") {
+    const conf =
+      typeof payload.confidence === "number"
+        ? `<div class="proposal-line"><strong>LLM confidence (best candidate):</strong> ${(payload.confidence * 100).toFixed(0)}%</div>`
+        : "";
+    const near =
+      payload.fromLowConfidenceMapping && payload.nearbySuperclaimId
+        ? `<div class="proposal-line"><strong>Closest taxonomy superclaim:</strong> <code>${escapeHtml(
+            String(payload.nearbySuperclaimId)
+          )}</code>${payload.nearbySuperclaimText ? ` — ${escapeHtml(String(payload.nearbySuperclaimText))}` : ""}</div>`
+        : "";
     return `
       <div class="proposal-line"><strong>Superclaim text:</strong> ${escapeHtml(
         payload.superclaimText || ""
       )}</div>
+      ${conf}
+      ${near}
       ${p.rationale ? `<div class="proposal-line proposal-reason">${escapeHtml(p.rationale)}</div>` : ""}
     `;
   }
