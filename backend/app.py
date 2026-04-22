@@ -10,11 +10,16 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from llm_confidence import score_subclaim_to_superclaim_confidence
+try:
+    from .llm_confidence import score_subclaim_to_superclaim_confidence
+except ImportError:
+    # ``uvicorn main:app`` / Vercel: ``backend.app`` is a package. ``backend/api/index.py`` uses
+    # ``from app import app`` so ``app`` is top-level and relative imports are invalid.
+    from llm_confidence import score_subclaim_to_superclaim_confidence
 
 
 ROOT = Path(__file__).resolve().parent
@@ -425,10 +430,14 @@ def _proposal_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
     reviewed_at = _parse_ts_to_epoch(row.get("reviewed_at") or row.get("reviewedAt"))
     applied_at = _parse_ts_to_epoch(row.get("applied_at") or row.get("appliedAt"))
 
+    st_raw = str(row.get("status") or "pending").strip().lower()
+    if st_raw not in ("pending", "approved", "rejected"):
+        st_raw = "pending"
+
     return {
         "id": row.get("id"),
         "type": row.get("type"),
-        "status": row.get("status"),
+        "status": st_raw,
         "createdAt": created_f,
         "bundleVersion": row.get("bundle_version") or row.get("bundleVersion") or "",
         "paragraph": row.get("paragraph") or "",
@@ -471,13 +480,21 @@ def _save_proposals(doc: Dict[str, Any]) -> None:
 
 
 def _upsert_proposal_db(p: Proposal) -> None:
+    if not (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip():
+        raise HTTPException(
+            status_code=500,
+            detail="taxonomy_proposals requires SUPABASE_SERVICE_ROLE_KEY in env (table RLS revokes anon/authenticated; "
+            "inserts with only SUPABASE_KEY/anon will fail or never persist).",
+        )
     sb = _get_supabase()
+    created_at = datetime.fromtimestamp(p.createdAt, tz=timezone.utc).isoformat()
     reviewed_at = datetime.fromtimestamp(p.reviewedAt, tz=timezone.utc).isoformat() if p.reviewedAt else None
     applied_at = datetime.fromtimestamp(p.appliedAt, tz=timezone.utc).isoformat() if p.appliedAt else None
     row = {
         "id": p.id,
         "type": p.type,
         "status": p.status,
+        "created_at": created_at,
         "bundle_version": p.bundleVersion,
         "paragraph": p.paragraph,
         "payload": p.payload,
@@ -737,6 +754,8 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "bundleVersion": _bundle_fingerprint(),
         "supabase": _supabase_enabled(),
+        "supabaseTaxonomyTables": SUPABASE_TAXONOMY_TABLES,
+        "supabaseServiceRoleConfigured": bool((os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()),
         "claimsStorage": _claims_storage_enabled(),
         "claimsBucket": SUPABASE_CLAIMS_BUCKET or None,
         "claimsPrefix": SUPABASE_CLAIMS_PREFIX or None,
@@ -784,12 +803,19 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
 @app.get("/api/proposals", response_model=List[Proposal])
 def list_proposals(status: Optional[str] = None) -> List[Proposal]:
     doc = _load_proposals()
+    want = (status or "").strip().lower() if status else ""
     out: List[Proposal] = []
     for row in doc.get("proposals", []):
         if not isinstance(row, dict):
             continue
-        p = _proposal_from_row(row)
-        if status and p.status != status:
+        try:
+            p = _proposal_from_row(row)
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Invalid taxonomy_proposals row id={row.get('id')!r}: {e}",
+            ) from e
+        if want and (p.status or "").strip().lower() != want:
             continue
         out.append(p)
     out.sort(key=lambda x: x.createdAt, reverse=True)
