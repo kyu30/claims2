@@ -23,6 +23,15 @@ except ImportError:
     # ``from app import app`` so ``app`` is top-level and relative imports are invalid.
     from llm_confidence import score_subclaim_to_superclaim_confidence
 
+try:
+    from ..greenwashing_prompts import system_instruction as _GREENWASHING_SYSTEM_INSTRUCTION
+except Exception:
+    # When backend/app.py is imported as top-level module on Vercel, repo root is on sys.path.
+    try:
+        from greenwashing_prompts import system_instruction as _GREENWASHING_SYSTEM_INSTRUCTION
+    except Exception:
+        _GREENWASHING_SYSTEM_INSTRUCTION = ""
+
 
 ROOT = Path(__file__).resolve().parent
 # Single-host Vercel deploy: HTML/JS/CSS live at repo root; taxonomy JSON may live under ``backend/`` or root.
@@ -765,6 +774,162 @@ def _llm_suggest_mapping(
     return ([], proposals)
 
 
+def _format_taxonomy_for_prompt(items: Dict[str, str]) -> str:
+    parts: List[str] = []
+    for k, v in sorted(items.items(), key=lambda kv: kv[0]):
+        kk = str(k).strip()
+        vv = str(v).strip()
+        if kk and vv:
+            parts.append(f"{kk}: {vv}")
+    return "\n".join(parts)
+
+
+def _strip_tagged_label(raw: str, tag_prefix: str) -> str:
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    # Example: "<NC_12>Some label<NC_12>" -> "Some label"
+    if s.startswith(f"<{tag_prefix}") and ">" in s and s.rfind("<") > 0:
+        try:
+            inner = s.split(">", 1)[1]
+            inner = inner.rsplit("<", 1)[0]
+            return inner.strip()
+        except Exception:
+            return s
+    return s
+
+
+def _pick_best_superclaim_id_from_text(text: str, superclaims: Dict[str, str]) -> str:
+    """Fallback when LLM creates a new super-claim label without an existing SC_* id."""
+    items = list(superclaims.items())
+    if not items:
+        return ""
+    cands = _tfidf_topk(text, items, k=1)
+    if not cands:
+        return ""
+    sid, _, _ = cands[0]
+    return _normalize_superclaim_id(sid)
+
+
+def _llm_prompt_extract_or_map_claims(
+    *,
+    paragraph: str,
+    paragraph_number: int,
+    codebook: Dict[str, str],
+    superclaims: Dict[str, str],
+    claim_map: Dict[str, str],
+) -> Tuple[List[MatchRow], List[Tuple[ProposalType, Dict[str, Any], str]]]:
+    """
+    Fallback behavior when the taxonomy matcher can't confidently map a paragraph.
+    Uses the prompt in greenwashing_prompts.py to either map to an existing NC_* or propose a new one.
+    """
+    if not _GREENWASHING_SYSTEM_INSTRUCTION.strip():
+        return ([], [])
+
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return ([], [])
+
+    model = (os.getenv("OPENAI_MODEL") or "gpt-5-mini").strip()
+    system_msg = _GREENWASHING_SYSTEM_INSTRUCTION.format(
+        codebook=_format_taxonomy_for_prompt(codebook),
+        superclaims=_format_taxonomy_for_prompt(superclaims),
+    )
+    user_msg = (
+        "Analyze this single paragraph as a standalone post.\n\n"
+        f"Paragraph number: {paragraph_number}\n"
+        f"Post text:\n{paragraph}\n\n"
+        "Return ONLY the JSON object described in the system instructions."
+    )
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        data = json.loads(text[text.find("{") : text.rfind("}") + 1]) if "{" in text else {}
+    except Exception:
+        return ([], [])
+
+    responses = data.get("responses")
+    if not isinstance(responses, list):
+        return ([], [])
+
+    matches: List[MatchRow] = []
+    proposals: List[Tuple[ProposalType, Dict[str, Any], str]] = []
+
+    for r in responses:
+        if not isinstance(r, dict):
+            continue
+        action_type = str(r.get("action_type") or "").strip()
+        rationale = str(r.get("rationale") or "").strip()
+        super_claim_raw = str(r.get("super_claim") or "").strip()
+        super_id = _normalize_superclaim_id(super_claim_raw) if super_claim_raw.startswith("SC_") else ""
+        if not super_id:
+            super_id = _pick_best_superclaim_id_from_text(super_claim_raw or paragraph, superclaims)
+        super_text = superclaims.get(super_id, "")
+
+        if action_type == "match_existing_category":
+            cats = r.get("matched_categories")
+            if not isinstance(cats, list) or not cats:
+                continue
+            nc = _normalize_subclaim_id(str(cats[0] or "").strip())
+            nc_text = codebook.get(nc, "")
+            if not nc or not nc_text:
+                continue
+            if not super_id:
+                super_id = _normalize_superclaim_id(str(claim_map.get(nc) or "").strip())
+                super_text = superclaims.get(super_id, "")
+            if super_id and super_text:
+                matches.append(
+                    MatchRow(
+                        subclaimId=nc,
+                        subclaimText=nc_text,
+                        superclaimId=super_id,
+                        superclaimText=super_text,
+                        confidence=0.6,
+                        reason=rationale or "LLM mapped paragraph to existing taxonomy claim.",
+                    )
+                )
+            continue
+
+        if action_type == "create_new_category":
+            new_cats = r.get("new_categories")
+            if not isinstance(new_cats, list) or not new_cats:
+                continue
+            label = _strip_tagged_label(str(new_cats[0] or ""), "NC_")
+            if not label:
+                continue
+            if not super_id:
+                super_id = _pick_best_superclaim_id_from_text(label, superclaims)
+                super_text = superclaims.get(super_id, "")
+            if not super_id:
+                continue
+            proposals.append(
+                (
+                    "new_subclaim",
+                    {
+                        "subclaimText": label,
+                        "suggestedSuperclaimId": super_id,
+                        "suggestedSuperclaimText": super_text or "",
+                        "sourceSnippet": str(r.get("source_snippet") or "").strip(),
+                        "paragraphNumber": paragraph_number,
+                    },
+                    rationale or "LLM proposed adding a new specific claim for this paragraph.",
+                )
+            )
+            continue
+
+    return (matches, proposals)
+
+
 # Same-origin fetches from ``script.js`` (no ``/{wildcard}`` route — only these basenames).
 _FRONTEND_ASSET_FILES: Tuple[str, ...] = (
     "styles.css",
@@ -884,7 +1049,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     super_items = list(superclaims.items())
 
     results: List[AnalyzeParagraphResult] = []
-    for p in paragraphs:
+    for idx, p in enumerate(paragraphs, start=1):
         sub_cands = _tfidf_topk(p, sub_items, k=req.max_candidates)
         super_cands = _tfidf_topk(p, super_items, k=max(6, min(req.max_candidates, 12)))
 
@@ -898,6 +1063,20 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
             merge_max_pairs=req.merge_max_pairs,
             propose_new_if_below=req.propose_new_if_below,
         )
+
+        # If we couldn't confidently map this paragraph, use the greenwashing prompt to map or propose a new claim.
+        if not matches:
+            llm_matches, llm_props = _llm_prompt_extract_or_map_claims(
+                paragraph=p,
+                paragraph_number=idx,
+                codebook=codebook,
+                superclaims=superclaims,
+                claim_map=claim_map,
+            )
+            if llm_matches:
+                matches = llm_matches
+            if llm_props:
+                proposal_specs.extend(llm_props)
 
         stored_props: List[Proposal] = []
         for ptype, payload, rationale in proposal_specs:

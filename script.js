@@ -1231,35 +1231,33 @@ async function refreshPendingProposals() {
   }
 
   const wrap = document.createElement("div");
-  wrap.className = "proposal-list";
+  wrap.className = "results-ledger";
   const byId = new Map();
 
   proposals.forEach((p) => {
     if (p && p.id) byId.set(String(p.id), p);
     const card = document.createElement("article");
-    card.className = "proposal-card";
+    card.className = "paragraph-result-card pending-proposal-card";
     const isNewSuperclaim = p.type === "new_superclaim";
     const topSections = isNewSuperclaim
       ? formatNewSuperclaimSectionsHtml(p)
       : `<div class="proposal-paragraph">${escapeHtml(p.paragraph || "")}</div>`;
+    const badgeText = formatProposalTitle(p).slice(0, 1).toUpperCase();
 
     card.innerHTML = `
-      <header class="proposal-header">
-        <div class="proposal-title">${escapeHtml(formatProposalTitle(p))}</div>
-        <div class="proposal-id"><code>${escapeHtml(p.id || "")}</code></div>
+      <header class="paragraph-result-header pending-proposal-header">
+        <div class="paragraph-result-badge pending-proposal-badge">${escapeHtml(badgeText)}</div>
+        <div class="paragraph-result-header-text">
+          <div class="paragraph-result-title">${escapeHtml(formatProposalTitle(p))}</div>
+          <div class="paragraph-result-sub"><code>${escapeHtml(p.id || "")}</code></div>
+        </div>
       </header>
-      ${topSections}
-      <div class="proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
-      <div class="proposal-actions">
-        <button class="action-btn" data-action="approve" data-id="${escapeHtmlAttr(
-          p.id || ""
-        )}">Approve</button>
-        <button class="action-btn action-btn--danger" data-action="reject" data-id="${escapeHtmlAttr(
-          p.id || ""
-        )}">Reject</button>
-        <button class="action-btn action-btn--accent" data-action="apply" data-id="${escapeHtmlAttr(
-          p.id || ""
-        )}">Apply</button>
+      <div class="pending-proposal-top">${topSections}</div>
+      <div class="pending-proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
+      <div class="pending-proposal-actions">
+        <button class="action-btn" data-action="approve" data-id="${escapeHtmlAttr(p.id || "")}">Approve</button>
+        <button class="action-btn action-btn--danger" data-action="reject" data-id="${escapeHtmlAttr(p.id || "")}">Reject</button>
+        <button class="action-btn action-btn--accent" data-action="apply" data-id="${escapeHtmlAttr(p.id || "")}">Apply</button>
       </div>
     `;
     wrap.appendChild(card);
