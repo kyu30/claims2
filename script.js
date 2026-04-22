@@ -977,6 +977,8 @@ async function postJson(url, body) {
           (data && (data.detail || data.message)) ||
           shortenApiFailureMessage(res, text) ||
           `HTTP ${res.status}`;
+        // IMPORTANT: never fall back to a different backend on a valid HTTP error response.
+        // Doing so can mix proposal IDs between deployments (list from one backend, apply on another).
         throw new Error(msg);
       }
       return data;
@@ -988,6 +990,9 @@ async function postJson(url, body) {
           ? `Failed to fetch (${target}). Confirm the API is deployed (open /api/health in a tab), CORS allows this origin, and meta claims-api-base / localStorage CLAIMS_API_BASE are correct or cleared.`
           : `${msg} (${target})`
       );
+      // If we got a real application error (not a network failure), stop here.
+      // "Proposal not found" is a good example: falling back will only make it worse.
+      if (msg !== "Failed to fetch") break;
     }
   }
   throw lastErr || new Error("Request failed.");
@@ -1033,6 +1038,7 @@ async function getJson(url) {
           ? `Failed to fetch (${target}). Confirm the API is deployed (open /api/health in a tab), CORS allows this origin, and meta claims-api-base / localStorage CLAIMS_API_BASE are correct or cleared.`
           : `${msg} (${target})`
       );
+      if (msg !== "Failed to fetch") break;
     }
   }
   throw lastErr || new Error("Request failed.");
