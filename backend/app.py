@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -59,6 +60,22 @@ SUPABASE_TAXONOMY_TABLES = (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip()
 )
 
 _supabase_client = None
+
+
+def _supabase_jwt_role() -> Optional[str]:
+    """Decode ``role`` from the configured Supabase JWT (no signature verification)."""
+    token = (SUPABASE_KEY or "").strip()
+    if not token or token.count(".") < 2:
+        return None
+    try:
+        payload_b64 = token.split(".")[1]
+        pad = "=" * (-len(payload_b64) % 4)
+        raw = base64.urlsafe_b64decode(payload_b64 + pad)
+        payload = json.loads(raw.decode("utf-8"))
+        r = payload.get("role")
+        return str(r) if r is not None else None
+    except Exception:
+        return None
 
 
 def _supabase_enabled() -> bool:
@@ -483,11 +500,15 @@ def _save_proposals(doc: Dict[str, Any]) -> None:
 
 
 def _upsert_proposal_db(p: Proposal) -> None:
-    if not (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip():
+    if not _supabase_enabled():
+        raise HTTPException(status_code=500, detail="Supabase is not configured; cannot persist proposals.")
+    role = _supabase_jwt_role()
+    if role in ("anon", "authenticated"):
         raise HTTPException(
             status_code=500,
-            detail="taxonomy_proposals requires SUPABASE_SERVICE_ROLE_KEY in env (table RLS revokes anon/authenticated; "
-            "inserts with only SUPABASE_KEY/anon will fail or never persist).",
+            detail="taxonomy_proposals requires the Supabase **service_role** JWT in SUPABASE_SERVICE_ROLE_KEY or "
+            "SUPABASE_KEY (this server’s key decodes as role="
+            f"{role!r}; RLS blocks anon/authenticated on that table).",
         )
     sb = _get_supabase()
     created_at = datetime.fromtimestamp(p.createdAt, tz=timezone.utc).isoformat()
@@ -818,12 +839,14 @@ _register_frontend_static_routes(app)
 
 @app.get("/api/health")
 def health() -> Dict[str, Any]:
+    jwt_role = _supabase_jwt_role()
     return {
         "ok": True,
         "bundleVersion": _bundle_fingerprint(),
         "supabase": _supabase_enabled(),
         "supabaseTaxonomyTables": SUPABASE_TAXONOMY_TABLES,
-        "supabaseServiceRoleConfigured": bool((os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()),
+        "supabaseJwtRole": jwt_role,
+        "supabaseServiceRoleConfigured": jwt_role == "service_role",
         "claimsStorage": _claims_storage_enabled(),
         "claimsBucket": SUPABASE_CLAIMS_BUCKET or None,
         "claimsPrefix": SUPABASE_CLAIMS_PREFIX or None,
@@ -870,6 +893,15 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
 
 @app.get("/api/proposals", response_model=List[Proposal])
 def list_proposals(status: Optional[str] = None) -> List[Proposal]:
+    if _supabase_enabled():
+        role = _supabase_jwt_role()
+        if role in ("anon", "authenticated"):
+            raise HTTPException(
+                status_code=503,
+                detail="Cannot read taxonomy_proposals with this API key (JWT role="
+                f"{role!r}). Configure the **service_role** secret in SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY "
+                "on the server — anon keys see an empty list due to RLS.",
+            )
     doc = _load_proposals()
     want = (status or "").strip().lower() if status else ""
     out: List[Proposal] = []

@@ -1023,20 +1023,29 @@ async function getJson(url) {
       const creds = apiFetchCredentials(target);
       const res = await fetch(target, { method: "GET", credentials: creds });
       const text = await res.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        // ignore
-      }
+      let errData = null;
       if (!res.ok) {
+        try {
+          errData = text ? JSON.parse(text) : null;
+        } catch {
+          // ignore
+        }
         const msg =
-          (data && (data.detail || data.message)) ||
+          (errData && (errData.detail || errData.message)) ||
           shortenApiFailureMessage(res, text) ||
           `HTTP ${res.status}`;
         throw new Error(msg);
       }
-      return data;
+      if (text != null && String(text).trim()) {
+        try {
+          return JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error(
+            `Invalid JSON (HTTP ${res.status}): ${parseErr && parseErr.message ? parseErr.message : String(parseErr)}`
+          );
+        }
+      }
+      return null;
     } catch (e) {
       const target = resolveApiUrl(base, url);
       const msg = e && e.message ? String(e.message) : String(e);
@@ -1220,7 +1229,15 @@ async function refreshPendingProposals() {
   container.innerHTML = `<p class="placeholder">Loading pending proposals…</p>`;
   let proposals = [];
   try {
-    proposals = await getJson("/api/proposals?status=pending");
+    const raw = await getJson("/api/proposals?status=pending");
+    if (!Array.isArray(raw)) {
+      throw new Error(
+        raw == null
+          ? "Empty response from /api/proposals (expected a JSON array)."
+          : `Invalid response from /api/proposals: expected an array, got ${typeof raw}.`
+      );
+    }
+    proposals = raw;
   } catch (e) {
     container.innerHTML = `<p class="placeholder error-text">Unable to load proposals: ${escapeHtml(
       e.message || String(e)
@@ -1228,8 +1245,9 @@ async function refreshPendingProposals() {
     return;
   }
 
-  if (!Array.isArray(proposals) || proposals.length === 0) {
-    container.innerHTML = `<p class="placeholder">No pending proposals yet.</p>`;
+  if (proposals.length === 0) {
+    container.innerHTML = `<p class="placeholder">No pending proposals yet.</p>
+      <p class="placeholder proposal-empty-hint">Run <strong>Analyze paragraphs</strong> to generate merge or low-confidence proposals; they are stored on the server. If this never fills after a successful analyze, open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a> and confirm <code>supabaseJwtRole</code> is <code>service_role</code> (anon keys cannot read <code>taxonomy_proposals</code> due to RLS).</p>`;
     return;
   }
 
@@ -1369,6 +1387,7 @@ async function handleAnalyzeClick() {
     artifactBundleVersion != null ? ` · artifact ${artifactBundleVersion}` : "";
   statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}.`;
   btn.disabled = false;
+  void refreshPendingProposals();
 }
 
 window.addEventListener("DOMContentLoaded", () => {

@@ -806,3 +806,20 @@ body {
   }
 }
 
+.proposal-empty-hint {
+  margin-top: 0.75rem;
+  max-width: 52rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  opacity: 0.88;
+}
+
+.proposal-empty-hint a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.proposal-empty-hint code {
+  font-size: 0.86em;
+}
+
