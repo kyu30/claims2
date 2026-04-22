@@ -1,7 +1,9 @@
+# Match `.python-version` (3.12+). Vercel’s `uv` downloads standalone CPython; 3.10 builds
+# can require libcrypt.so.1, which is absent on current Vercel Linux images.
 [project]
 name = "claims2"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
