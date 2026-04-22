@@ -180,6 +180,26 @@ body {
   color: var(--text-muted);
 }
 
+.reviewer-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+
+.reviewer-row .field-label {
+  margin: 0;
+}
+
+.reviewer-input {
+  min-height: auto;
+  max-height: none;
+  height: 44px;
+  resize: none;
+  padding: 10px 12px;
+}
+
 .results-container {
   background: radial-gradient(circle at top, #020617, #020617 40%, #020617 100%);
   border-radius: var(--radius-lg);
