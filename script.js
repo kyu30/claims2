@@ -581,7 +581,7 @@ function renderResults(paragraphsWithMatches) {
   ledger.className = "results-ledger";
   const total = paragraphsWithMatches.length;
 
-  paragraphsWithMatches.forEach(({ paragraph, matches }, idx) => {
+  paragraphsWithMatches.forEach(({ paragraph, matches, proposals: paragraphProposals = [] }, idx) => {
     const card = document.createElement("article");
     card.className = "paragraph-result-card";
     card.setAttribute("aria-labelledby", `paragraph-result-title-${idx}`);
@@ -677,6 +677,28 @@ function renderResults(paragraphsWithMatches) {
     table.appendChild(thead);
     table.appendChild(tbody);
     card.appendChild(table);
+
+    if (Array.isArray(paragraphProposals) && paragraphProposals.length > 0) {
+      const propBlock = document.createElement("div");
+      propBlock.className = "paragraph-proposals";
+      propBlock.innerHTML = `<h3 class="paragraph-proposals-title">Taxonomy proposals (this paragraph)</h3>
+        <p class="paragraph-proposals-hint">Shown from the analyze response. The <strong>Pending taxonomy proposals</strong> list below updates when the server has stored them (e.g. Supabase or a writable data directory).</p>`;
+      paragraphProposals.forEach((p) => {
+        if (!p || !p.type) return;
+        const sub = document.createElement("article");
+        sub.className = "proposal-card proposal-card--embedded";
+        sub.innerHTML = `
+          <header class="proposal-header">
+            <div class="proposal-title">${escapeHtml(formatProposalTitle(p))}</div>
+            <div class="proposal-id"><code>${escapeHtml(p.id || "")}</code></div>
+          </header>
+          <div class="proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
+        `;
+        propBlock.appendChild(sub);
+      });
+      card.appendChild(propBlock);
+    }
+
     ledger.appendChild(card);
   });
 
@@ -1276,6 +1298,7 @@ async function handleAnalyzeClick() {
     const withMatches = rows.map((r) => ({
       paragraph: r.paragraph,
       matches: Array.isArray(r.matches) ? r.matches : [],
+      proposals: Array.isArray(r.proposals) ? r.proposals : [],
     }));
 
     renderResults(withMatches);

@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -1150,13 +1150,28 @@ def serve_index() -> FileResponse:
     return FileResponse(path, media_type="text/html; charset=utf-8")
 
 
-@app.get("/{name}")
-def serve_root_static(name: str) -> FileResponse:
-    if name not in _ROOT_STATIC_NAMES or ".." in name or "/" in name:
+def _root_static_file_response(filename: str) -> FileResponse:
+    if filename not in _ROOT_STATIC_NAMES or filename == "index.html":
         raise HTTPException(status_code=404, detail="Not Found")
-    path = ROOT / name
+    path = ROOT / filename
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Not Found")
     mime, _ = mimetypes.guess_type(str(path))
     return FileResponse(path, media_type=mime or "application/octet-stream")
+
+
+def _register_root_static_files() -> None:
+    """Literal routes only (no ``/{name}`` catch-all) so ``/api/*`` cannot be shadowed."""
+
+    def _factory(name: str) -> Callable[[], FileResponse]:
+        def _send() -> FileResponse:
+            return _root_static_file_response(name)
+
+        return _send
+
+    for fname in sorted(_ROOT_STATIC_NAMES - {"index.html"}):
+        app.add_api_route(f"/{fname}", _factory(fname), methods=["GET"])
+
+
+_register_root_static_files()
 
