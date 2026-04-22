@@ -47,9 +47,14 @@ PROPOSALS_PATH = APP_DATA_DIR / "proposals.json"
 MERGES_PATH = APP_DATA_DIR / "merges.json"
 
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip()
+# Vercel Marketplace sync uses SUPABASE_PUBLISHABLE_KEY; Supabase dashboard uses anon/service keys.
 SUPABASE_KEY = (
     (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     or (os.getenv("SUPABASE_KEY") or "").strip()
+    or (os.getenv("SUPABASE_PUBLISHABLE_KEY") or "").strip()
+    or (os.getenv("SUPABASE_ANON_KEY") or "").strip()
+    or (os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") or "").strip()
+    or (os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY") or "").strip()
 )
 SUPABASE_CLAIMS_BUCKET = (os.getenv("SUPABASE_CLAIMS_BUCKET") or "").strip()
 SUPABASE_CLAIMS_PREFIX = (os.getenv("SUPABASE_CLAIMS_PREFIX") or "").strip().strip("/")
