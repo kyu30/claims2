@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -23,6 +24,8 @@ except ImportError:
 
 
 ROOT = Path(__file__).resolve().parent
+# Single-host Vercel deploy: HTML/JS/CSS live at repo root; taxonomy JSON may live under ``backend/`` or root.
+FRONTEND_ROOT = ROOT.parent if (ROOT.parent / "index.html").exists() else ROOT
 
 _DEFAULT_ENV_PATH = ROOT / ".env"
 load_dotenv(dotenv_path=str(_DEFAULT_ENV_PATH), override=False)
@@ -736,6 +739,55 @@ def _llm_suggest_mapping(
     return ([], proposals)
 
 
+# Same-origin fetches from ``script.js`` (no ``/{wildcard}`` route — only these basenames).
+_FRONTEND_ASSET_FILES: Tuple[str, ...] = (
+    "styles.css",
+    "script.js",
+    "favicon.svg",
+    "greenwashing_claim_history.json",
+    "greenwashing_superclaims.json",
+    "greenwashing_codebook.json",
+    "claim_superclaim_map.json",
+    "subclaim_bertopic_collapse.json",
+)
+
+
+def _static_file_first_existing(label: str) -> Optional[Path]:
+    for base in (FRONTEND_ROOT, ROOT):
+        p = base / label
+        if p.is_file():
+            return p.resolve()
+    return None
+
+
+def _register_frontend_static_routes(fastapi_app: FastAPI) -> None:
+    """If only FastAPI is deployed, ``/`` must serve ``index.html`` or the UI shows ``{"detail":"not found"}``."""
+
+    def _file_or_404(label: str) -> FileResponse:
+        found = _static_file_first_existing(label)
+        if found is None:
+            raise HTTPException(status_code=404, detail=f"Missing static file: {label}")
+        return FileResponse(found, filename=label)
+
+    @fastapi_app.get("/")
+    def serve_index() -> FileResponse:
+        return _file_or_404("index.html")
+
+    @fastapi_app.get("/index.html")
+    def serve_index_explicit() -> FileResponse:
+        return _file_or_404("index.html")
+
+    for name in _FRONTEND_ASSET_FILES:
+
+        def _make_asset_handler(fn: str = name) -> Any:
+            def _serve_asset() -> FileResponse:
+                return _file_or_404(fn)
+
+            return _serve_asset
+
+        fastapi_app.add_api_route(f"/{name}", _make_asset_handler(), methods=["GET"])
+
+
 app = FastAPI(title="Claim Mapper API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -746,6 +798,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_register_frontend_static_routes(app)
 
 
 @app.get("/api/health")
