@@ -678,27 +678,6 @@ function renderResults(paragraphsWithMatches) {
     table.appendChild(tbody);
     card.appendChild(table);
 
-    if (Array.isArray(paragraphProposals) && paragraphProposals.length > 0) {
-      const propBlock = document.createElement("div");
-      propBlock.className = "paragraph-proposals";
-      propBlock.innerHTML = `<h3 class="paragraph-proposals-title">Taxonomy proposals (this paragraph)</h3>
-        <p class="paragraph-proposals-hint">Shown from the analyze response. The <strong>Pending taxonomy proposals</strong> list below updates when the server has stored them (e.g. Supabase or a writable data directory).</p>`;
-      paragraphProposals.forEach((p) => {
-        if (!p || !p.type) return;
-        const sub = document.createElement("article");
-        sub.className = "proposal-card proposal-card--embedded";
-        sub.innerHTML = `
-          <header class="proposal-header">
-            <div class="proposal-title">${escapeHtml(formatProposalTitle(p))}</div>
-            <div class="proposal-id"><code>${escapeHtml(p.id || "")}</code></div>
-          </header>
-          <div class="proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
-        `;
-        propBlock.appendChild(sub);
-      });
-      card.appendChild(propBlock);
-    }
-
     ledger.appendChild(card);
   });
 
