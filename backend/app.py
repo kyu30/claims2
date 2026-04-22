@@ -318,6 +318,9 @@ def _paragraph_as_new_superclaim_text(paragraph: str, *, max_len: int = 400) -> 
     if not s:
         return ""
 
+    def _same_as_article(candidate: str) -> bool:
+        return _normalized_superclaim_text_key(candidate) == _normalized_superclaim_text_key(s)
+
     # Prefer generating an *original* superclaim label via the dedicated prompt.
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if api_key and _SUPERCLAIM_DRAFT_INSTRUCTION.strip():
@@ -341,14 +344,14 @@ def _paragraph_as_new_superclaim_text(paragraph: str, *, max_len: int = 400) -> 
                 ],
             )
             out = " ".join(str(resp.choices[0].message.content or "").split()).strip()
-            if out:
+            if out and not _same_as_article(out):
                 return out[:max_len].rstrip()
         except Exception:
             # Fall back to heuristic below.
             pass
 
     # Fallback: deterministic single-line (used when LLM isn't available).
-    return s[:max_len].rstrip()
+    return "" if _same_as_article(s) else s[:max_len].rstrip()
 
 
 def _existing_superclaim_text_keys(superclaims: Dict[str, str]) -> set[str]:
