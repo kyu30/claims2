@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field, ValidationError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -763,6 +763,19 @@ def _static_file_first_existing(label: str) -> Optional[Path]:
 def _register_frontend_static_routes(fastapi_app: FastAPI) -> None:
     """If only FastAPI is deployed, ``/`` must serve ``index.html`` or the UI shows ``{"detail":"not found"}``."""
 
+    def _index_html_response() -> HTMLResponse:
+        found = _static_file_first_existing("index.html")
+        if found is None:
+            raise HTTPException(status_code=404, detail="Missing static file: index.html")
+        # Use ``HTMLResponse`` (no ``Content-Disposition``) so CDNs/browsers never treat the homepage as a download.
+        # Production domains can cache aggressively; avoid stale ``attachment`` headers from older deploys.
+        body = found.read_text(encoding="utf-8")
+        return HTMLResponse(
+            content=body,
+            media_type="text/html; charset=utf-8",
+            headers={"Cache-Control": "private, max-age=0, must-revalidate"},
+        )
+
     def _file_or_404(label: str) -> FileResponse:
         found = _static_file_first_existing(label)
         if found is None:
@@ -771,12 +784,12 @@ def _register_frontend_static_routes(fastapi_app: FastAPI) -> None:
         return FileResponse(found, filename=label, content_disposition_type="inline")
 
     @fastapi_app.get("/")
-    def serve_index() -> FileResponse:
-        return _file_or_404("index.html")
+    def serve_index() -> HTMLResponse:
+        return _index_html_response()
 
     @fastapi_app.get("/index.html")
-    def serve_index_explicit() -> FileResponse:
-        return _file_or_404("index.html")
+    def serve_index_explicit() -> HTMLResponse:
+        return _index_html_response()
 
     for name in _FRONTEND_ASSET_FILES:
 

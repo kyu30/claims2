@@ -941,15 +941,48 @@ function resolveApiUrl(base, path) {
   return `${b}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+/** Same-origin calls must send cookies so Vercel Deployment Protection can authorize `/api/*`. Cross-origin keeps `omit` so `Access-Control-Allow-Origin: *` stays valid. */
+function apiFetchCredentials(target) {
+  try {
+    if (typeof window === "undefined" || !window.location) return "omit";
+    const resolved = new URL(target, window.location.href);
+    if (resolved.origin === window.location.origin) return "same-origin";
+  } catch {
+    // ignore
+  }
+  return "omit";
+}
+
+/** Prefer a short hint when the server returned HTML (e.g. Vercel auth) instead of JSON. */
+function shortenApiFailureMessage(res, text) {
+  const raw = text == null ? "" : String(text);
+  const ct = (res && res.headers && res.headers.get("content-type")) || "";
+  if (
+    raw.includes("Authentication Required") ||
+    (ct.includes("text/html") && raw.includes("vercel") && raw.length > 400)
+  ) {
+    return (
+      "Vercel Deployment Protection blocked this API request (HTML login page instead of JSON). " +
+      "Options: turn off protection for this environment, use a production deployment without protection, " +
+      "or stay signed in—same-origin requests now send cookies so protected previews can work after you open the site once."
+    );
+  }
+  if (ct.includes("text/html") && raw.length > 400) {
+    return `Unexpected HTML from API (HTTP ${res.status}). Check the URL and deployment protection settings.`;
+  }
+  return raw.length > 900 ? `${raw.slice(0, 900)}…` : raw;
+}
+
 async function postJson(url, body) {
   const bases = getApiCandidates();
   let lastErr = null;
   for (const base of bases) {
     try {
       const target = resolveApiUrl(base, url);
+      const creds = apiFetchCredentials(target);
       const res = await fetch(target, {
         method: "POST",
-        credentials: "omit",
+        credentials: creds,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -963,7 +996,7 @@ async function postJson(url, body) {
       if (!res.ok) {
         const msg =
           (data && (data.detail || data.message)) ||
-          text ||
+          shortenApiFailureMessage(res, text) ||
           `HTTP ${res.status}`;
         throw new Error(msg);
       }
@@ -987,7 +1020,8 @@ async function getJson(url) {
   for (const base of bases) {
     try {
       const target = resolveApiUrl(base, url);
-      const res = await fetch(target, { method: "GET", credentials: "omit" });
+      const creds = apiFetchCredentials(target);
+      const res = await fetch(target, { method: "GET", credentials: creds });
       const text = await res.text();
       let data = null;
       try {
@@ -998,7 +1032,7 @@ async function getJson(url) {
       if (!res.ok) {
         const msg =
           (data && (data.detail || data.message)) ||
-          text ||
+          shortenApiFailureMessage(res, text) ||
           `HTTP ${res.status}`;
         throw new Error(msg);
       }
