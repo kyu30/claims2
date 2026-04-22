@@ -1334,6 +1334,12 @@ async function handleAnalyzeClick() {
   statusEl.textContent = "Analyzing…";
   statusEl.classList.remove("error-text");
 
+  // BERTopic collapse + snippet index live in static JSON; load them even when the backend
+  // handles /api/analyze, otherwise collapseBySubclaim stays null and the UI shows "No artifact loaded".
+  if (!flattenedSnippets && !dataLoadError) {
+    await loadClaimsData();
+  }
+
   // Prefer the backend LLM API (supports proposals + human approval). Fallback to local heuristic if unavailable.
   try {
     const api = await postJson("/api/analyze", { text });
@@ -1399,5 +1405,6 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  void loadClaimsData();
   refreshPendingProposals();
 });
