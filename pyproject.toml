@@ -17,3 +17,9 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+# Only ship `backend/` in the wheel. Root modules like `greenwashing_prompts.py` would
+# otherwise be picked up as a second top-level package and break `uv sync`/setuptools.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
