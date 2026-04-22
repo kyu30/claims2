@@ -845,6 +845,16 @@ _register_frontend_static_routes(app)
 @app.get("/api/health")
 def health() -> Dict[str, Any]:
     jwt_role = _supabase_jwt_role()
+    # Safe runtime diagnostics (no secrets) to debug Vercel env wiring.
+    key_sources = [
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_KEY",
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    ]
+    key_source = next((k for k in key_sources if (os.getenv(k) or "").strip()), None)
     return {
         "ok": True,
         "bundleVersion": _bundle_fingerprint(),
@@ -855,6 +865,12 @@ def health() -> Dict[str, Any]:
         "claimsStorage": _claims_storage_enabled(),
         "claimsBucket": SUPABASE_CLAIMS_BUCKET or None,
         "claimsPrefix": SUPABASE_CLAIMS_PREFIX or None,
+        "env": {
+            "hasSupabaseUrl": bool((os.getenv("SUPABASE_URL") or "").strip()),
+            "keySource": key_source,
+            "hasClaimsBucket": bool((os.getenv("SUPABASE_CLAIMS_BUCKET") or "").strip()),
+            "taxonomyTablesFlag": (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip() or None,
+        },
     }
 
 
