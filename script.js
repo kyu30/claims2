@@ -1279,12 +1279,20 @@ async function refreshPendingProposals() {
       const id = el.getAttribute("data-id");
       if (!id || !action) return;
 
-      el.disabled = true;
+      const card = el.closest("article");
+      const cardButtons = card ? Array.from(card.querySelectorAll("button[data-action]")) : [el];
+      cardButtons.forEach((b) => (b.disabled = true));
       try {
         const reviewer = requireReviewerName();
         if (!reviewer) {
-          el.disabled = false;
+          cardButtons.forEach((b) => (b.disabled = false));
           return;
+        }
+        // Apply implies approval: approve first, then apply.
+        if (action === "apply") {
+          await postJson(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+            reviewer_name: reviewer,
+          });
         }
         if (action === "apply" && getSupabaseClient()) {
           const p = byId.get(String(id));
@@ -1302,7 +1310,7 @@ async function refreshPendingProposals() {
         // Applying should also refresh claims data next run; for now just refresh the list.
         await refreshPendingProposals();
       } catch (e) {
-        el.disabled = false;
+        cardButtons.forEach((b) => (b.disabled = false));
         alert(`Proposal ${action} failed: ${e.message || String(e)}`);
       }
     });
