@@ -210,6 +210,12 @@ body {
   overflow: auto;
 }
 
+/* Pending proposals should feel lighter/less tall than main results. */
+#proposals-container.results-container {
+  padding: 10px 12px;
+  max-height: 340px;
+}
+
 .placeholder {
   margin: 0;
   font-size: 13px;
