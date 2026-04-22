@@ -1,5 +1,6 @@
 import hashlib
 import json
+import mimetypes
 import os
 import time
 import uuid
@@ -10,6 +11,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -1122,4 +1124,39 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
     p.appliedAt = now
     p = _upsert_proposal(p)
     return ProposalActionResponse(ok=True, proposal=p)
+
+
+# --- Static UI + taxonomy JSON (same-origin on Vercel: only FastAPI is deployed) ---
+_ROOT_STATIC_NAMES = frozenset(
+    {
+        "index.html",
+        "styles.css",
+        "script.js",
+        "greenwashing_claim_history.json",
+        "greenwashing_codebook.json",
+        "greenwashing_superclaims.json",
+        "claim_superclaim_map.json",
+        "subclaim_bertopic_collapse.json",
+        "favicon.svg",
+    }
+)
+
+
+@app.get("/")
+def serve_index() -> FileResponse:
+    path = ROOT / "index.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="index.html missing from deployment root")
+    return FileResponse(path, media_type="text/html; charset=utf-8")
+
+
+@app.get("/{name}")
+def serve_root_static(name: str) -> FileResponse:
+    if name not in _ROOT_STATIC_NAMES or ".." in name or "/" in name:
+        raise HTTPException(status_code=404, detail="Not Found")
+    path = ROOT / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not Found")
+    mime, _ = mimetypes.guess_type(str(path))
+    return FileResponse(path, media_type=mime or "application/octet-stream")
 
