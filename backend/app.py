@@ -767,7 +767,8 @@ def _register_frontend_static_routes(fastapi_app: FastAPI) -> None:
         found = _static_file_first_existing(label)
         if found is None:
             raise HTTPException(status_code=404, detail=f"Missing static file: {label}")
-        return FileResponse(found, filename=label)
+        # Starlette defaults to ``attachment`` when ``filename`` is set, which forces a download.
+        return FileResponse(found, filename=label, content_disposition_type="inline")
 
     @fastapi_app.get("/")
     def serve_index() -> FileResponse:
