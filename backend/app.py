@@ -79,6 +79,10 @@ SUPABASE_TAXONOMY_TABLES = (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip()
 _supabase_client = None
 
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
+# Optional writable directory for claim JSON (codebook, map, etc.) when not using Supabase Storage.
+# Hugging Face Docker Spaces often have a read-only app dir; set this to e.g. /tmp/claims-data and
+# seed it with copies of the four JSON files so **Apply** can persist taxonomy changes.
+CLAIMS_JSON_DIR = (os.getenv("CLAIMS_JSON_DIR") or "").strip()
 _pg_checked = False
 _pg_ok = False
 
@@ -205,6 +209,23 @@ def _claims_storage_enabled() -> bool:
     return _supabase_enabled() and bool(SUPABASE_CLAIMS_BUCKET)
 
 
+def _local_claim_json_path(filename: str) -> Path:
+    fn = str(filename).lstrip("/")
+    if CLAIMS_JSON_DIR:
+        return Path(CLAIMS_JSON_DIR) / fn
+    return ROOT / fn
+
+
+def _read_local_claim_json_bytes(filename: str) -> bytes:
+    primary = _local_claim_json_path(filename)
+    try:
+        return primary.read_bytes()
+    except FileNotFoundError:
+        if CLAIMS_JSON_DIR and primary != (ROOT / str(filename).lstrip("/")):
+            return (ROOT / str(filename).lstrip("/")).read_bytes()
+        raise
+
+
 def _get_supabase():
     global _supabase_client
     if not _supabase_enabled():
@@ -250,9 +271,8 @@ def _read_claim_json_bytes(filename: str) -> bytes:
             raise HTTPException(status_code=500, detail=f"Missing object in storage: {path}")
         return data if isinstance(data, (bytes, bytearray)) else bytes(data)
 
-    path = ROOT / filename
     try:
-        return path.read_bytes()
+        return _read_local_claim_json_bytes(filename)
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=f"Missing required file: {filename}") from e
 
@@ -274,7 +294,8 @@ def _write_json_atomic(path: Path, obj: Any) -> None:
 
 def _upload_claim_json(filename: str, obj: Any) -> None:
     if not _claims_storage_enabled():
-        path = ROOT / filename
+        path = _local_claim_json_path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
         _write_json_atomic(path, obj)
         return
 
@@ -1242,12 +1263,14 @@ def health() -> Dict[str, Any]:
         "claimsStorage": _claims_storage_enabled(),
         "claimsBucket": SUPABASE_CLAIMS_BUCKET or None,
         "claimsPrefix": SUPABASE_CLAIMS_PREFIX or None,
+        "claimsJsonDir": CLAIMS_JSON_DIR or None,
         "env": {
             "hasDatabaseUrl": bool((os.getenv("DATABASE_URL") or "").strip()),
             "hasSupabaseUrl": bool((os.getenv("SUPABASE_URL") or "").strip()),
             "keySource": key_source,
             "hasClaimsBucket": bool((os.getenv("SUPABASE_CLAIMS_BUCKET") or "").strip()),
             "taxonomyTablesFlag": (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip() or None,
+            "hasClaimsJsonDir": bool((os.getenv("CLAIMS_JSON_DIR") or "").strip()),
         },
     }
 

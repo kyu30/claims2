@@ -1232,7 +1232,7 @@ async function refreshPendingProposals() {
 
   if (proposals.length === 0) {
     container.innerHTML = `<p class="placeholder">No pending proposals yet.</p>
-      <p class="placeholder proposal-empty-hint">Run <strong>Analyze paragraphs</strong> to generate merge or low-confidence proposals; they are stored on the server. If this never fills after a successful analyze, open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a> and confirm <code>supabaseJwtRole</code> is <code>service_role</code> (anon keys cannot read <code>taxonomy_proposals</code> due to RLS).</p>`;
+      <p class="placeholder proposal-empty-hint">Run <strong>Analyze paragraphs</strong> to generate merge or low-confidence proposals; they are stored on the server. If this never fills after a successful analyze, open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a>: for Railway/Postgres, <code>postgresOk</code> should be true; for Supabase-only, <code>supabaseJwtRole</code> must be <code>service_role</code> (anon keys cannot read proposals due to RLS).</p>`;
     return;
   }
 

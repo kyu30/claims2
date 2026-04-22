@@ -1,5 +1,12 @@
 -- Railway Postgres schema for proposal persistence (Option 2).
--- Run this against your Railway database before deploying the Space.
+-- Run this against your Railway Postgres (Railway dashboard → Postgres → Connect → DATABASE_URL).
+--
+-- Hugging Face Docker Space: add DATABASE_URL as a Space secret (same URL Railway shows).
+-- Use a URL with SSL if required, e.g. append ?sslmode=require when the provider expects TLS.
+--
+-- This app uses DATABASE_URL for taxonomy_proposals / taxonomy_merge_log when set; Supabase
+-- client variables are then unnecessary for those tables. Claim JSON files still read from
+-- disk unless you use Supabase Storage or set CLAIMS_JSON_DIR to a writable directory.
 
 create table if not exists taxonomy_proposals (
   id text primary key,
