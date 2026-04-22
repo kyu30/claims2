@@ -25,12 +25,15 @@ except ImportError:
 
 try:
     from ..greenwashing_prompts import system_instruction as _GREENWASHING_SYSTEM_INSTRUCTION
+    from ..greenwashing_prompts import superclaim_draft_instruction as _SUPERCLAIM_DRAFT_INSTRUCTION
 except Exception:
     # When backend/app.py is imported as top-level module on Vercel, repo root is on sys.path.
     try:
         from greenwashing_prompts import system_instruction as _GREENWASHING_SYSTEM_INSTRUCTION
+        from greenwashing_prompts import superclaim_draft_instruction as _SUPERCLAIM_DRAFT_INSTRUCTION
     except Exception:
         _GREENWASHING_SYSTEM_INSTRUCTION = ""
+        _SUPERCLAIM_DRAFT_INSTRUCTION = ""
 
 
 ROOT = Path(__file__).resolve().parent
@@ -314,8 +317,37 @@ def _paragraph_as_new_superclaim_text(paragraph: str, *, max_len: int = 400) -> 
     s = " ".join(str(paragraph or "").split()).strip()
     if not s:
         return ""
-    if len(s) <= max_len:
-        return s
+
+    # Prefer generating an *original* superclaim label via the dedicated prompt.
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if api_key and _SUPERCLAIM_DRAFT_INSTRUCTION.strip():
+        try:
+            from openai import OpenAI
+
+            model = (os.getenv("OPENAI_MODEL") or "gpt-5-mini").strip()
+            # Only need superclaims (not codebook/map) for draft-label generation.
+            _, superclaims, _ = _load_taxonomy()
+            system_msg = _SUPERCLAIM_DRAFT_INSTRUCTION.format(
+                superclaims=_format_taxonomy_for_prompt(superclaims),
+            )
+            user_msg = f"Paragraph:\n{paragraph}\n"
+
+            client = OpenAI(api_key=api_key)
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                ],
+            )
+            out = " ".join(str(resp.choices[0].message.content or "").split()).strip()
+            if out:
+                return out[:max_len].rstrip()
+        except Exception:
+            # Fall back to heuristic below.
+            pass
+
+    # Fallback: deterministic single-line (used when LLM isn't available).
     return s[:max_len].rstrip()
 
 

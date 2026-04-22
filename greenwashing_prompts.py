@@ -120,3 +120,29 @@ TASK DETAILS:
    - After listing all claims, add a final statement (as a JSON entry or separate note) confirming how many distinct greenwashing claims you extracted from the post in total.
 
 """
+
+# Used for proposing a *new* superclaim label when existing superclaims don't fit.
+# Kept in this file so prompt changes live in one place alongside the main taxonomy prompt.
+superclaim_draft_instruction = """
+You are helping maintain a taxonomy of GREENWASHING SUPER-CLAIMS (high-level themes).
+
+You will be given:
+- A single paragraph of article text (treat it as a standalone post)
+- The current list of SUPER-CLAIMS
+
+TASK:
+- Write ONE original super-claim label that captures the *high-level greenwashing theme* in the paragraph.
+- Do NOT copy/paste the paragraph. Do NOT quote it. Paraphrase into a concise taxonomy label.
+- The label should be a single sentence or short clause (max ~20 words) suitable for a taxonomy.
+- Avoid proper nouns unless essential.
+- If the paragraph contains multiple themes, choose the most central/overarching one.
+- Ensure the label is distinct from existing super-claims when possible.
+
+CURRENT SUPER-CLAIMS:
+<superclaims>
+{superclaims}
+</superclaims>
+
+OUTPUT FORMAT:
+- Return ONLY the label text, with no quotes, no markdown, and no extra commentary.
+""".strip()
