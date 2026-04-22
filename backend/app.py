@@ -78,6 +78,108 @@ SUPABASE_TAXONOMY_TABLES = (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip()
 
 _supabase_client = None
 
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
+_pg_checked = False
+_pg_ok = False
+
+
+def _postgres_enabled() -> bool:
+    return bool(DATABASE_URL)
+
+
+def _pg_healthcheck() -> bool:
+    """
+    Lightweight Postgres connectivity check used only for /api/health.
+    Never raises; returns False on any error.
+    """
+    global _pg_checked, _pg_ok
+    if _pg_checked:
+        return _pg_ok
+    _pg_checked = True
+    if not _postgres_enabled():
+        _pg_ok = False
+        return _pg_ok
+    try:
+        import psycopg
+
+        with psycopg.connect(DATABASE_URL, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select 1")
+                cur.fetchone()
+        _pg_ok = True
+        return True
+    except Exception:
+        _pg_ok = False
+        return False
+
+
+def _pg_connect():
+    if not _postgres_enabled():
+        raise HTTPException(status_code=500, detail="DATABASE_URL is not configured; cannot use Postgres persistence.")
+    try:
+        import psycopg
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"psycopg is not installed ({e}). Add psycopg[binary] to requirements.",
+        ) from e
+    # Railway commonly requires SSL; libpq will negotiate based on URL params/PGSSLMODE.
+    return psycopg.connect(DATABASE_URL)
+
+
+def _parse_iso_to_epoch(value: Any) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip()
+    if not s:
+        return 0.0
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _proposal_row_from_pg(row: Dict[str, Any]) -> Dict[str, Any]:
+    created_at = row.get("created_at")
+    reviewed_at = row.get("reviewed_at")
+    applied_at = row.get("applied_at")
+    created_f = _parse_iso_to_epoch(created_at)
+    if not created_f:
+        try:
+            created_f = float(created_at.timestamp())  # type: ignore[union-attr]
+        except Exception:
+            created_f = time.time()
+
+    st_raw = str(row.get("status") or "pending").strip().lower()
+    if st_raw not in ("pending", "approved", "rejected"):
+        st_raw = "pending"
+
+    payload = row.get("payload") or {}
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    return {
+        "id": row.get("id"),
+        "type": row.get("type"),
+        "status": st_raw,
+        "createdAt": created_f,
+        "bundleVersion": row.get("bundle_version") or "",
+        "paragraph": row.get("paragraph") or "",
+        "payload": payload,
+        "rationale": row.get("rationale") or "",
+        "reviewedBy": str(row.get("reviewed_by") or "").strip(),
+        "reviewedAt": _parse_iso_to_epoch(reviewed_at),
+        "appliedBy": str(row.get("applied_by") or "").strip(),
+        "appliedAt": _parse_iso_to_epoch(applied_at),
+    }
+
 
 def _supabase_jwt_role() -> Optional[str]:
     """Decode ``role`` from the configured Supabase JWT (no signature verification)."""
@@ -520,6 +622,29 @@ def _proposal_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _load_proposals() -> Dict[str, Any]:
+    if _postgres_enabled():
+        try:
+            with _pg_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        select
+                          id, type, status, created_at, bundle_version, paragraph, payload, rationale,
+                          reviewed_by, reviewed_at, applied_by, applied_at
+                        from taxonomy_proposals
+                        order by created_at desc
+                        """
+                    )
+                    cols = [c.name for c in cur.description] if cur.description else []
+                    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Postgres read proposals failed: {e}") from e
+        normalized = []
+        for r in rows:
+            if isinstance(r, dict):
+                normalized.append(_proposal_row_from_pg(r))
+        return {"proposals": normalized}
+
     if _supabase_enabled():
         sb = _get_supabase()
         try:
@@ -549,8 +674,61 @@ def _save_proposals(doc: Dict[str, Any]) -> None:
 
 
 def _upsert_proposal_db(p: Proposal) -> None:
+    created_at = datetime.fromtimestamp(p.createdAt, tz=timezone.utc)
+    reviewed_at = datetime.fromtimestamp(p.reviewedAt, tz=timezone.utc) if p.reviewedAt else None
+    applied_at = datetime.fromtimestamp(p.appliedAt, tz=timezone.utc) if p.appliedAt else None
+
+    if _postgres_enabled():
+        try:
+            with _pg_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        insert into taxonomy_proposals (
+                          id, type, status, created_at, bundle_version, paragraph, payload, rationale,
+                          reviewed_by, reviewed_at, applied_by, applied_at
+                        ) values (
+                          %s, %s, %s, %s, %s, %s, %s, %s,
+                          %s, %s, %s, %s
+                        )
+                        on conflict (id) do update set
+                          type = excluded.type,
+                          status = excluded.status,
+                          created_at = excluded.created_at,
+                          bundle_version = excluded.bundle_version,
+                          paragraph = excluded.paragraph,
+                          payload = excluded.payload,
+                          rationale = excluded.rationale,
+                          reviewed_by = excluded.reviewed_by,
+                          reviewed_at = excluded.reviewed_at,
+                          applied_by = excluded.applied_by,
+                          applied_at = excluded.applied_at
+                        """,
+                        (
+                            p.id,
+                            p.type,
+                            p.status,
+                            created_at,
+                            p.bundleVersion,
+                            p.paragraph,
+                            json.dumps(p.payload),
+                            p.rationale or "",
+                            (p.reviewedBy or None) if (p.reviewedBy or "").strip() else None,
+                            reviewed_at,
+                            (p.appliedBy or None) if (p.appliedBy or "").strip() else None,
+                            applied_at,
+                        ),
+                    )
+                conn.commit()
+            return
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Postgres upsert proposal failed: {e}") from e
+
     if not _supabase_enabled():
-        raise HTTPException(status_code=500, detail="Supabase is not configured; cannot persist proposals.")
+        raise HTTPException(
+            status_code=500,
+            detail="No persistence configured (set DATABASE_URL or SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY).",
+        )
     role = _supabase_jwt_role()
     if role in ("anon", "authenticated"):
         raise HTTPException(
@@ -560,22 +738,19 @@ def _upsert_proposal_db(p: Proposal) -> None:
             f"{role!r}; RLS blocks anon/authenticated on that table).",
         )
     sb = _get_supabase()
-    created_at = datetime.fromtimestamp(p.createdAt, tz=timezone.utc).isoformat()
-    reviewed_at = datetime.fromtimestamp(p.reviewedAt, tz=timezone.utc).isoformat() if p.reviewedAt else None
-    applied_at = datetime.fromtimestamp(p.appliedAt, tz=timezone.utc).isoformat() if p.appliedAt else None
     row = {
         "id": p.id,
         "type": p.type,
         "status": p.status,
-        "created_at": created_at,
+        "created_at": created_at.isoformat(),
         "bundle_version": p.bundleVersion,
         "paragraph": p.paragraph,
         "payload": p.payload,
         "rationale": p.rationale,
         "reviewed_by": p.reviewedBy or None,
-        "reviewed_at": reviewed_at,
+        "reviewed_at": reviewed_at.isoformat() if reviewed_at else None,
         "applied_by": p.appliedBy or None,
-        "applied_at": applied_at,
+        "applied_at": applied_at.isoformat() if applied_at else None,
     }
     try:
         sb.table("taxonomy_proposals").upsert(row, on_conflict="id").execute()
@@ -584,7 +759,7 @@ def _upsert_proposal_db(p: Proposal) -> None:
 
 
 def _upsert_proposal(p: Proposal) -> Proposal:
-    if _supabase_enabled():
+    if _postgres_enabled() or _supabase_enabled():
         _upsert_proposal_db(p)
         return p
 
@@ -1058,6 +1233,8 @@ def health() -> Dict[str, Any]:
     return {
         "ok": True,
         "bundleVersion": _bundle_fingerprint(),
+        "postgres": _postgres_enabled(),
+        "postgresOk": _pg_healthcheck() if _postgres_enabled() else False,
         "supabase": _supabase_enabled(),
         "supabaseTaxonomyTables": SUPABASE_TAXONOMY_TABLES,
         "supabaseJwtRole": jwt_role,
@@ -1066,6 +1243,7 @@ def health() -> Dict[str, Any]:
         "claimsBucket": SUPABASE_CLAIMS_BUCKET or None,
         "claimsPrefix": SUPABASE_CLAIMS_PREFIX or None,
         "env": {
+            "hasDatabaseUrl": bool((os.getenv("DATABASE_URL") or "").strip()),
             "hasSupabaseUrl": bool((os.getenv("SUPABASE_URL") or "").strip()),
             "keySource": key_source,
             "hasClaimsBucket": bool((os.getenv("SUPABASE_CLAIMS_BUCKET") or "").strip()),
@@ -1128,7 +1306,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
 
 @app.get("/api/proposals", response_model=List[Proposal])
 def list_proposals(status: Optional[str] = None) -> List[Proposal]:
-    if _supabase_enabled():
+    if (not _postgres_enabled()) and _supabase_enabled():
         role = _supabase_jwt_role()
         if role in ("anon", "authenticated"):
             raise HTTPException(
@@ -1158,6 +1336,35 @@ def list_proposals(status: Optional[str] = None) -> List[Proposal]:
 
 
 def _append_merge_event(p: Proposal) -> None:
+    if _postgres_enabled():
+        try:
+            with _pg_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        insert into taxonomy_merge_log (proposal_id, merge_type, bundle_version, payload)
+                        values (%s, %s, %s, %s)
+                        """,
+                        (
+                            p.id,
+                            p.type,
+                            p.bundleVersion,
+                            json.dumps(
+                                {
+                                    **p.payload,
+                                    "appliedBy": p.appliedBy,
+                                    "appliedAt": p.appliedAt,
+                                    "reviewedBy": p.reviewedBy,
+                                    "reviewedAt": p.reviewedAt,
+                                }
+                            ),
+                        ),
+                    )
+                conn.commit()
+            return
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Postgres merge log insert failed: {e}") from e
+
     if _supabase_enabled():
         sb = _get_supabase()
         try:
@@ -1235,6 +1442,32 @@ def _merge_claim_histories(*, canonical: str, remove: str) -> None:
 
 
 def _get_proposal_or_404(pid: str) -> Proposal:
+    if _postgres_enabled():
+        try:
+            with _pg_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        select
+                          id, type, status, created_at, bundle_version, paragraph, payload, rationale,
+                          reviewed_by, reviewed_at, applied_by, applied_at
+                        from taxonomy_proposals
+                        where id = %s
+                        limit 1
+                        """,
+                        (pid,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        raise HTTPException(status_code=404, detail="Proposal not found")
+                    cols = [c.name for c in cur.description] if cur.description else []
+                    d = dict(zip(cols, row))
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Postgres read proposal failed: {e}") from e
+        return _proposal_from_row(_proposal_row_from_pg(d))
+
     if _supabase_enabled():
         sb = _get_supabase()
         try:

@@ -5,3 +5,4 @@ python-dotenv
 numpy
 scikit-learn
 supabase
+psycopg[binary]

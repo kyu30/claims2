@@ -1,3 +1,14 @@
+---
+title: Claims2
+emoji: 🧾
+colorFrom: gray
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
 # Claim Mapping MVP UI
 
 Minimal UI to map article **paragraphs** to subclaims and superclaims using four JSON data files plus an optional offline collapse artifact.
