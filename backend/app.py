@@ -75,6 +75,12 @@ SUPABASE_TAXONOMY_TABLES = (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip()
     "true",
     "yes",
 )
+# When true and DATABASE_URL is set, load taxonomy from Postgres (taxonomy_superclaims / taxonomy_subclaims).
+POSTGRES_TAXONOMY_TABLES = (os.getenv("POSTGRES_TAXONOMY_TABLES") or "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 _supabase_client = None
 
@@ -89,6 +95,10 @@ _pg_ok = False
 
 def _postgres_enabled() -> bool:
     return bool(DATABASE_URL)
+
+
+def _postgres_taxonomy_enabled() -> bool:
+    return _postgres_enabled() and POSTGRES_TAXONOMY_TABLES
 
 
 def _pg_healthcheck() -> bool:
@@ -234,7 +244,14 @@ def _get_supabase():
             detail="Supabase is not configured (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).",
         )
     if _supabase_client is None:
-        from supabase import create_client
+        try:
+            from supabase import create_client
+        except ImportError as e:
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase env vars are set but the `supabase` package is not installed. "
+                "Install `supabase` or use DATABASE_URL / Railway only.",
+            ) from e
 
         _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     return _supabase_client
@@ -317,6 +334,23 @@ def _upload_claim_json(filename: str, obj: Any) -> None:
 
 def _bundle_fingerprint() -> str:
     h = hashlib.sha256()
+    if _postgres_taxonomy_enabled():
+        codebook, superclaims, claim_map = _load_taxonomy_from_postgres()
+        blobs = (
+            (CODEBOOK_NAME, json.dumps(dict(sorted(codebook.items())), ensure_ascii=False, sort_keys=True).encode("utf-8") + b"\n"),
+            (SUPERCLAIMS_NAME, json.dumps(dict(sorted(superclaims.items())), ensure_ascii=False, sort_keys=True).encode("utf-8") + b"\n"),
+            (MAP_NAME, json.dumps(dict(sorted(claim_map.items())), ensure_ascii=False, sort_keys=True).encode("utf-8") + b"\n"),
+        )
+        for name, body in blobs:
+            h.update(name.encode("utf-8"))
+            h.update(b"\0")
+            h.update(body)
+            h.update(b"\0\0")
+        h.update(HISTORY_NAME.encode("utf-8"))
+        h.update(b"\0")
+        h.update(_read_claim_json_bytes(HISTORY_NAME))
+        h.update(b"\0\0")
+        return h.hexdigest()[:12]
     for name in (CODEBOOK_NAME, SUPERCLAIMS_NAME, MAP_NAME, HISTORY_NAME):
         h.update(name.encode("utf-8"))
         h.update(b"\0")
@@ -373,7 +407,93 @@ def _next_id(existing_ids: List[str], prefix: str) -> str:
     return f"{prefix}{n}"
 
 
+def _normalize_taxonomy_rows(
+    sc_rows: List[Any], nc_rows: List[Any]
+) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+    super_norm: Dict[str, str] = {}
+    for r in sc_rows:
+        if not isinstance(r, dict):
+            continue
+        sid = _normalize_superclaim_id(str(r.get("id") or "").strip())
+        txt = str(r.get("text") or "").strip()
+        if sid and txt:
+            super_norm[sid] = txt
+
+    codebook_norm: Dict[str, str] = {}
+    map_norm: Dict[str, str] = {}
+    for r in nc_rows:
+        if not isinstance(r, dict):
+            continue
+        nid = _normalize_subclaim_id(str(r.get("id") or "").strip())
+        txt = str(r.get("text") or "").strip()
+        sc = _normalize_superclaim_id(str(r.get("superclaim_id") or "").strip())
+        if nid and txt:
+            codebook_norm[nid] = txt
+        if nid and sc:
+            map_norm[nid] = sc
+    return codebook_norm, super_norm, map_norm
+
+
+def _load_taxonomy_from_postgres() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+    try:
+        with _pg_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select id, text from taxonomy_superclaims")
+                cols = [c.name for c in cur.description] if cur.description else []
+                sc_rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                cur.execute("select id, text, superclaim_id from taxonomy_subclaims")
+                cols2 = [c.name for c in cur.description] if cur.description else []
+                nc_rows = [dict(zip(cols2, r)) for r in cur.fetchall()]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Postgres taxonomy table read failed: {e}") from e
+    return _normalize_taxonomy_rows(sc_rows, nc_rows)
+
+
+def _sync_taxonomy_to_postgres(
+    codebook: Dict[str, str], superclaims: Dict[str, str], claim_map: Dict[str, str]
+) -> None:
+    now = datetime.now(timezone.utc)
+    try:
+        with _pg_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("delete from taxonomy_subclaims")
+                cur.execute("delete from taxonomy_superclaims")
+                for sid, text in sorted(superclaims.items()):
+                    cur.execute(
+                        """
+                        insert into taxonomy_superclaims (id, text, created_at, updated_at)
+                        values (%s, %s, %s, %s)
+                        """,
+                        (sid, text, now, now),
+                    )
+                for nid, text in sorted(codebook.items()):
+                    sc = claim_map.get(nid)
+                    if not sc:
+                        continue
+                    scid = _normalize_superclaim_id(str(sc).strip())
+                    if not scid:
+                        continue
+                    cur.execute(
+                        """
+                        insert into taxonomy_subclaims (id, text, superclaim_id, created_at, updated_at)
+                        values (%s, %s, %s, %s, %s)
+                        """,
+                        (nid, text, scid, now, now),
+                    )
+            conn.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Postgres taxonomy sync failed: {e}") from e
+
+
 def _load_taxonomy() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+    if POSTGRES_TAXONOMY_TABLES and not _postgres_enabled():
+        raise HTTPException(
+            status_code=500,
+            detail="POSTGRES_TAXONOMY_TABLES is enabled but DATABASE_URL is not set.",
+        )
+    if _postgres_taxonomy_enabled():
+        return _load_taxonomy_from_postgres()
+
     if SUPABASE_TAXONOMY_TABLES and _supabase_enabled():
         sb = _get_supabase()
         try:
@@ -388,29 +508,7 @@ def _load_taxonomy() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Supabase taxonomy table read failed: {e}") from e
 
-        super_norm = {}
-        for r in sc_rows:
-            if not isinstance(r, dict):
-                continue
-            sid = _normalize_superclaim_id(str(r.get("id") or "").strip())
-            txt = str(r.get("text") or "").strip()
-            if sid and txt:
-                super_norm[sid] = txt
-
-        codebook_norm = {}
-        map_norm = {}
-        for r in nc_rows:
-            if not isinstance(r, dict):
-                continue
-            nid = _normalize_subclaim_id(str(r.get("id") or "").strip())
-            txt = str(r.get("text") or "").strip()
-            sc = _normalize_superclaim_id(str(r.get("superclaim_id") or "").strip())
-            if nid and txt:
-                codebook_norm[nid] = txt
-            if nid and sc:
-                map_norm[nid] = sc
-
-        return codebook_norm, super_norm, map_norm
+        return _normalize_taxonomy_rows(sc_rows, nc_rows)
 
     codebook = _read_claim_json(CODEBOOK_NAME)
     superclaims = _read_claim_json(SUPERCLAIMS_NAME)
@@ -748,7 +846,7 @@ def _upsert_proposal_db(p: Proposal) -> None:
     if not _supabase_enabled():
         raise HTTPException(
             status_code=500,
-            detail="No persistence configured (set DATABASE_URL or SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY).",
+            detail="No persistence configured (set DATABASE_URL for Railway/Postgres, or Supabase URL + service key).",
         )
     role = _supabase_jwt_role()
     if role in ("anon", "authenticated"):
@@ -1258,6 +1356,7 @@ def health() -> Dict[str, Any]:
         "postgresOk": _pg_healthcheck() if _postgres_enabled() else False,
         "supabase": _supabase_enabled(),
         "supabaseTaxonomyTables": SUPABASE_TAXONOMY_TABLES,
+        "postgresTaxonomyTables": POSTGRES_TAXONOMY_TABLES and _postgres_enabled(),
         "supabaseJwtRole": jwt_role,
         "supabaseServiceRoleConfigured": jwt_role == "service_role",
         "claimsStorage": _claims_storage_enabled(),
@@ -1270,6 +1369,7 @@ def health() -> Dict[str, Any]:
             "keySource": key_source,
             "hasClaimsBucket": bool((os.getenv("SUPABASE_CLAIMS_BUCKET") or "").strip()),
             "taxonomyTablesFlag": (os.getenv("SUPABASE_TAXONOMY_TABLES") or "").strip() or None,
+            "postgresTaxonomyTablesFlag": (os.getenv("POSTGRES_TAXONOMY_TABLES") or "").strip() or None,
             "hasClaimsJsonDir": bool((os.getenv("CLAIMS_JSON_DIR") or "").strip()),
         },
     }
@@ -1537,7 +1637,7 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
 
     codebook, superclaims, claim_map = _load_taxonomy()
 
-    # In "browser-writes-taxonomy" mode, the frontend will update Supabase tables directly.
+    # When skip_taxonomy_update, the client already applied taxonomy (legacy browser + Supabase).
     # The backend should only mark/log the proposal as applied.
     if req.skip_taxonomy_update:
         now = time.time()
@@ -1555,7 +1655,10 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
             raise HTTPException(status_code=400, detail="Missing superclaimText")
         new_id = _next_id(list(superclaims.keys()), "SC_")
         superclaims[new_id] = text
-        _upload_claim_json(SUPERCLAIMS_NAME, dict(sorted(superclaims.items())))
+        if _postgres_taxonomy_enabled():
+            _sync_taxonomy_to_postgres(codebook, superclaims, claim_map)
+        else:
+            _upload_claim_json(SUPERCLAIMS_NAME, dict(sorted(superclaims.items())))
 
     elif p.type == "new_subclaim":
         text = str(p.payload.get("subclaimText") or "").strip()
@@ -1568,13 +1671,17 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
             # If the suggested superclaim is missing, create it as well.
             suggested_sc = _next_id(list(superclaims.keys()), "SC_")
             superclaims[suggested_sc] = str(p.payload.get("suggestedSuperclaimText") or "New superclaim").strip()
-            _upload_claim_json(SUPERCLAIMS_NAME, dict(sorted(superclaims.items())))
+            if not _postgres_taxonomy_enabled():
+                _upload_claim_json(SUPERCLAIMS_NAME, dict(sorted(superclaims.items())))
 
         new_nc = _next_id(list(codebook.keys()), "NC_")
         codebook[new_nc] = text
         claim_map[new_nc] = suggested_sc
-        _upload_claim_json(CODEBOOK_NAME, dict(sorted(codebook.items())))
-        _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
+        if _postgres_taxonomy_enabled():
+            _sync_taxonomy_to_postgres(codebook, superclaims, claim_map)
+        else:
+            _upload_claim_json(CODEBOOK_NAME, dict(sorted(codebook.items())))
+            _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
 
     elif p.type == "merge_subclaims":
         canonical = _normalize_subclaim_id(str(p.payload.get("canonicalSubclaimId") or "").strip())
@@ -1600,8 +1707,11 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
             del claim_map[remove]
 
         _merge_claim_histories(canonical=canonical, remove=remove)
-        _upload_claim_json(CODEBOOK_NAME, dict(sorted(codebook.items())))
-        _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
+        if _postgres_taxonomy_enabled():
+            _sync_taxonomy_to_postgres(codebook, superclaims, claim_map)
+        else:
+            _upload_claim_json(CODEBOOK_NAME, dict(sorted(codebook.items())))
+            _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
         _append_merge_event(p)
 
     elif p.type == "merge_superclaims":
@@ -1621,8 +1731,11 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
             if _normalize_superclaim_id(str(sc)) == remove:
                 claim_map[_normalize_subclaim_id(sid)] = canonical
 
-        _upload_claim_json(SUPERCLAIMS_NAME, dict(sorted(superclaims.items())))
-        _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
+        if _postgres_taxonomy_enabled():
+            _sync_taxonomy_to_postgres(codebook, superclaims, claim_map)
+        else:
+            _upload_claim_json(SUPERCLAIMS_NAME, dict(sorted(superclaims.items())))
+            _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
         _append_merge_event(p)
 
     elif p.type == "link_subclaim_to_superclaim":
@@ -1635,7 +1748,10 @@ def apply_proposal(proposal_id: str, req: ReviewerActionRequest) -> ProposalActi
         if sc_id not in superclaims:
             raise HTTPException(status_code=400, detail=f"Unknown superclaim: {sc_id}")
         claim_map[sub_id] = sc_id
-        _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
+        if _postgres_taxonomy_enabled():
+            _sync_taxonomy_to_postgres(codebook, superclaims, claim_map)
+        else:
+            _upload_claim_json(MAP_NAME, dict(sorted(claim_map.items())))
 
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported proposal type: {p.type}")
