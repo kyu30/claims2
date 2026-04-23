@@ -127,6 +127,35 @@ def _pg_healthcheck() -> bool:
         return False
 
 
+def _pg_taxonomy_proposal_counts() -> Dict[str, Optional[int]]:
+    """Best-effort counts for /api/health (no secrets). None values mean the query failed."""
+    out: Dict[str, Optional[int]] = {"taxonomyProposalsTotal": None, "taxonomyProposalsPending": None}
+    if not _postgres_enabled():
+        return out
+    try:
+        import psycopg
+
+        with psycopg.connect(DATABASE_URL, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select count(*) from taxonomy_proposals")
+                r = cur.fetchone()
+                out["taxonomyProposalsTotal"] = int(r[0]) if r is not None else 0
+                cur.execute("select count(*) from taxonomy_proposals where lower(trim(status)) = 'pending'")
+                r2 = cur.fetchone()
+                out["taxonomyProposalsPending"] = int(r2[0]) if r2 is not None else 0
+    except Exception:
+        pass
+    return out
+
+
+def _proposals_persistence_mode() -> str:
+    if _postgres_enabled():
+        return "postgres"
+    if _supabase_enabled():
+        return "supabase"
+    return "local_file"
+
+
 def _pg_connect():
     if not _postgres_enabled():
         raise HTTPException(status_code=500, detail="DATABASE_URL is not configured; cannot use Postgres persistence.")
@@ -1052,18 +1081,30 @@ def _llm_suggest_mapping(
                 )
                 emitted_super += 1
 
-    best_sub_id, best_sub_text, _ = sub_candidates[0]
-    best_super_id, best_super_text, _ = super_candidates[0]
+    best_sub_id, best_sub_text, sub_sim = sub_candidates[0]
+    best_super_id, best_super_text, super_sim = super_candidates[0]
 
-    score = score_subclaim_to_superclaim_confidence(
-        subclaim_text=best_sub_text,
-        superclaim_text=best_super_text,
-        subclaim_id=best_sub_id,
-        superclaim_id=best_super_id,
-    )
-    conf = float(score.get("confidence") or 0.0)
-    verdict = str(score.get("verdict") or "uncertain")
-    reason = str(score.get("reason") or "").strip()
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if api_key:
+        try:
+            score = score_subclaim_to_superclaim_confidence(
+                subclaim_text=best_sub_text,
+                superclaim_text=best_super_text,
+                subclaim_id=best_sub_id,
+                superclaim_id=best_super_id,
+            )
+            conf = float(score.get("confidence") or 0.0)
+            verdict = str(score.get("verdict") or "uncertain")
+            reason = str(score.get("reason") or "").strip()
+        except Exception:
+            conf = float(max(0.0, min(1.0, min(float(sub_sim), float(super_sim)))))
+            verdict = "uncertain"
+            reason = "LLM confidence failed; using TF‑IDF similarity as fallback."
+    else:
+        # Without OpenAI, use TF‑IDF cosine so /api/analyze still succeeds and can persist proposals.
+        conf = float(max(0.0, min(1.0, min(float(sub_sim), float(super_sim)))))
+        verdict = "uncertain"
+        reason = "TF‑IDF ranking only (set OPENAI_API_KEY for LLM scoring)."
 
     if conf >= propose_new_if_below and verdict in ("valid", "uncertain"):
         return (
@@ -1349,11 +1390,15 @@ def health() -> Dict[str, Any]:
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     ]
     key_source = next((k for k in key_sources if (os.getenv(k) or "").strip()), None)
+    pg_counts = _pg_taxonomy_proposal_counts()
     return {
         "ok": True,
         "bundleVersion": _bundle_fingerprint(),
         "postgres": _postgres_enabled(),
         "postgresOk": _pg_healthcheck() if _postgres_enabled() else False,
+        "proposalsPersistence": _proposals_persistence_mode(),
+        "taxonomyProposalsTotal": pg_counts.get("taxonomyProposalsTotal"),
+        "taxonomyProposalsPending": pg_counts.get("taxonomyProposalsPending"),
         "supabase": _supabase_enabled(),
         "supabaseTaxonomyTables": SUPABASE_TAXONOMY_TABLES,
         "postgresTaxonomyTables": POSTGRES_TAXONOMY_TABLES and _postgres_enabled(),

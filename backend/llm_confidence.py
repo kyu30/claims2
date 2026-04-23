@@ -44,9 +44,13 @@ def score_subclaim_to_superclaim_confidence(
     Live LLM-scored confidence for whether a subclaim belongs under a superclaim.
     Returns a dict with at least: {"confidence": float, "verdict": str, "reason": str}
     """
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
-        raise RuntimeError("Missing OPENAI_API_KEY in environment (.env).")
+        return {
+            "verdict": "uncertain",
+            "confidence": 0.0,
+            "reason": "OPENAI_API_KEY not set; LLM confidence scoring skipped.",
+        }
 
     model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
     client = OpenAI(api_key=api_key)
@@ -89,8 +93,15 @@ Return ONLY valid JSON, no markdown, with this exact shape:
         ],
     )
 
-    text = (resp.choices[0].message.content or "").strip()
-    data = _extract_json(text)
+    try:
+        text = (resp.choices[0].message.content or "").strip()
+        data = _extract_json(text)
+    except Exception:
+        return {
+            "verdict": "uncertain",
+            "confidence": 0.0,
+            "reason": "LLM confidence call failed; treating as uncertain.",
+        }
 
     verdict = data.get("verdict")
     if verdict not in ("valid", "invalid", "uncertain"):
