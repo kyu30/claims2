@@ -475,7 +475,26 @@ def _load_taxonomy_from_postgres() -> Tuple[Dict[str, str], Dict[str, str], Dict
                 nc_rows = [dict(zip(cols2, r)) for r in cur.fetchall()]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Postgres taxonomy table read failed: {e}") from e
-    return _normalize_taxonomy_rows(sc_rows, nc_rows)
+    codebook_norm, super_norm, map_norm = _normalize_taxonomy_rows(sc_rows, nc_rows)
+    # Common misconfig: POSTGRES_TAXONOMY_TABLES=1 but tables are empty (never imported/seeded).
+    # In that case, fall back to the shipped JSON taxonomy so the app still works.
+    if not super_norm and not codebook_norm and not map_norm:
+        codebook = _read_claim_json(CODEBOOK_NAME)
+        superclaims = _read_claim_json(SUPERCLAIMS_NAME)
+        claim_map = _read_claim_json(MAP_NAME)
+        if isinstance(codebook, dict) and isinstance(superclaims, dict) and isinstance(claim_map, dict):
+            codebook_norm = {
+                _normalize_subclaim_id(k): str(v).strip() for k, v in codebook.items() if str(v).strip()
+            }
+            super_norm = {
+                _normalize_superclaim_id(k): str(v).strip()
+                for k, v in superclaims.items()
+                if str(v).strip()
+            }
+            map_norm = {
+                _normalize_subclaim_id(k): _normalize_superclaim_id(v) for k, v in claim_map.items() if v
+            }
+    return codebook_norm, super_norm, map_norm
 
 
 def _sync_taxonomy_to_postgres(
@@ -1105,6 +1124,23 @@ def _llm_suggest_mapping(
         conf = float(max(0.0, min(1.0, min(float(sub_sim), float(super_sim)))))
         verdict = "uncertain"
         reason = "TF‑IDF ranking only (set OPENAI_API_KEY for LLM scoring)."
+
+    # When we don't have OpenAI configured, still return a best-guess mapping so the UI doesn't
+    # show "No mapping found" for every paragraph.
+    if (not api_key) and verdict in ("valid", "uncertain"):
+        return (
+            [
+                MatchRow(
+                    subclaimId=best_sub_id,
+                    subclaimText=best_sub_text,
+                    superclaimId=best_super_id,
+                    superclaimText=best_super_text,
+                    confidence=conf,
+                    reason=reason,
+                )
+            ],
+            proposals,
+        )
 
     if conf >= propose_new_if_below and verdict in ("valid", "uncertain"):
         return (
