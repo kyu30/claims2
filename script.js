@@ -702,108 +702,6 @@ function escapeHtml(s) {
 
 const REVIEWER_STORAGE_KEY = "CLAIMS_REVIEWER_NAME";
 
-function getSupabaseConfig() {
-  const metaUrl = document.querySelector('meta[name="supabase-url"]');
-  const metaKey = document.querySelector('meta[name="supabase-anon-key"]');
-  const url = (metaUrl && metaUrl.getAttribute("content")) || "";
-  const key = (metaKey && metaKey.getAttribute("content")) || "";
-  return { url: String(url || "").trim(), key: String(key || "").trim() };
-}
-
-function getSupabaseClient() {
-  const cfg = getSupabaseConfig();
-  if (!cfg.url || !cfg.key) return null;
-  if (typeof window === "undefined") return null;
-  if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
-  try {
-    return window.supabase.createClient(cfg.url, cfg.key);
-  } catch {
-    return null;
-  }
-}
-
-function nextIdFromRows(rows, prefix) {
-  let max = 0;
-  for (const r of rows || []) {
-    const id = String(r?.id || "");
-    if (!id.startsWith(prefix)) continue;
-    const n = parseInt(id.slice(prefix.length), 10);
-    if (!Number.isNaN(n)) max = Math.max(max, n);
-  }
-  return `${prefix}${max + 1}`;
-}
-
-async function applyProposalToSupabaseTaxonomy(p) {
-  const sb = getSupabaseClient();
-  if (!sb) throw new Error("Supabase taxonomy config missing (set meta supabase-url and supabase-anon-key).");
-
-  const type = String(p?.type || "");
-  const payload = p?.payload || {};
-
-  if (type === "new_superclaim") {
-    const text = String(payload.superclaimText || "").trim();
-    if (!text) throw new Error("Missing superclaimText");
-
-    const { data: existing, error: selErr } = await sb
-      .from("taxonomy_superclaims")
-      .select("id")
-      .order("id", { ascending: false });
-    if (selErr) throw new Error(selErr.message || String(selErr));
-
-    const newId = nextIdFromRows(existing || [], "SC_");
-    const { error: insErr } = await sb.from("taxonomy_superclaims").insert({ id: newId, text });
-    if (insErr) throw new Error(insErr.message || String(insErr));
-    return;
-  }
-
-  if (type === "merge_subclaims") {
-    const canonical = String(payload.canonicalSubclaimId || "").trim();
-    const remove = String(payload.removeSubclaimId || "").trim();
-    if (!canonical || !remove || canonical === remove) throw new Error("Missing canonical/remove subclaim ids");
-
-    const { data: rows, error } = await sb
-      .from("taxonomy_subclaims")
-      .select("id,superclaim_id")
-      .in("id", [canonical, remove]);
-    if (error) throw new Error(error.message || String(error));
-    const canonRow = (rows || []).find((r) => String(r.id) === canonical);
-    const remRow = (rows || []).find((r) => String(r.id) === remove);
-    if (!canonRow || !remRow) throw new Error("Unknown subclaim id(s) in taxonomy_subclaims");
-    if (String(canonRow.superclaim_id) !== String(remRow.superclaim_id)) {
-      throw new Error("Refusing merge: subclaims are not mapped to the same superclaim.");
-    }
-
-    const { error: delErr } = await sb.from("taxonomy_subclaims").delete().eq("id", remove);
-    if (delErr) throw new Error(delErr.message || String(delErr));
-    return;
-  }
-
-  if (type === "merge_superclaims") {
-    const canonical = String(payload.canonicalSuperclaimId || "").trim();
-    const remove = String(payload.removeSuperclaimId || "").trim();
-    if (!canonical || !remove || canonical === remove) throw new Error("Missing canonical/remove superclaim ids");
-
-    const { data: rows, error } = await sb
-      .from("taxonomy_superclaims")
-      .select("id")
-      .in("id", [canonical, remove]);
-    if (error) throw new Error(error.message || String(error));
-    if (!Array.isArray(rows) || rows.length !== 2) throw new Error("Unknown superclaim id(s) in taxonomy_superclaims");
-
-    const { error: updErr } = await sb
-      .from("taxonomy_subclaims")
-      .update({ superclaim_id: canonical })
-      .eq("superclaim_id", remove);
-    if (updErr) throw new Error(updErr.message || String(updErr));
-
-    const { error: delErr } = await sb.from("taxonomy_superclaims").delete().eq("id", remove);
-    if (delErr) throw new Error(delErr.message || String(delErr));
-    return;
-  }
-
-  throw new Error(`Unsupported proposal type for browser taxonomy apply: ${type}`);
-}
-
 function getReviewerName() {
   const el = document.getElementById("reviewer-name");
   const fromInput = el && el.value != null ? String(el.value).trim() : "";
@@ -1232,7 +1130,9 @@ async function refreshPendingProposals() {
 
   if (proposals.length === 0) {
     container.innerHTML = `<p class="placeholder">No pending proposals yet.</p>
-      <p class="placeholder proposal-empty-hint">Run <strong>Analyze paragraphs</strong> to generate merge or low-confidence proposals; they are stored on the server. If this never fills after a successful analyze, open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a> and confirm <code>supabaseJwtRole</code> is <code>service_role</code> (anon keys cannot read <code>taxonomy_proposals</code> due to RLS).</p>`;
+      <p class="placeholder proposal-empty-hint">This list only shows proposals with status <strong>pending</strong> (approved/rejected/applied disappear here).</p>
+      <p class="placeholder proposal-empty-hint">Proposals are written to the database only when <strong>Analyze paragraphs</strong> succeeds on the <strong>backend</strong> (<code>/api/analyze</code>). If the status line says the backend failed and switched to a local heuristic, nothing is saved—open DevTools → Console / Network for the <code>/api/analyze</code> error.</p>
+      <p class="placeholder proposal-empty-hint">Open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a>: <code>proposalsPersistence</code> should be <code>postgres</code> for Railway, <code>taxonomyProposalsTotal</code> is the row count in the DB (if <code>0</code>, no proposals were stored yet—run backend <strong>Analyze</strong> or import rows). This panel only lists <strong>pending</strong>; open <a href="/api/proposals" target="_blank" rel="noopener"><code>/api/proposals</code></a> for every status.</p>`;
     return;
   }
 
@@ -1294,19 +1194,9 @@ async function refreshPendingProposals() {
             reviewer_name: reviewer,
           });
         }
-        if (action === "apply" && getSupabaseClient()) {
-          const p = byId.get(String(id));
-          if (!p) throw new Error("Missing proposal payload in UI.");
-          await applyProposalToSupabaseTaxonomy(p);
-          await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
-            reviewer_name: reviewer,
-            skip_taxonomy_update: true,
-          });
-        } else {
-          await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
-            reviewer_name: reviewer,
-          });
-        }
+        await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
+          reviewer_name: reviewer,
+        });
         // Applying should also refresh claims data next run; for now just refresh the list.
         await refreshPendingProposals();
       } catch (e) {
@@ -1361,7 +1251,7 @@ async function handleAnalyzeClick() {
     console.warn("Backend /api/analyze failed; falling back to local matching.", e);
   }
 
-  // Local fallback
+  // Local fallback (does not POST proposals to the server—only backend /api/analyze does)
   statusEl.textContent = "Backend unavailable; running local heuristic…";
   if (!flattenedSnippets && !dataLoadError) {
     await loadClaimsData();
@@ -1382,7 +1272,8 @@ async function handleAnalyzeClick() {
   renderResults(withMatches);
   const bundleBit =
     artifactBundleVersion != null ? ` · artifact ${artifactBundleVersion}` : "";
-  statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}.`;
+  statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}. Local matching only—backend /api/analyze failed, so proposals were not saved (see Console / Network for the error).`;
+  statusEl.classList.add("error-text");
   btn.disabled = false;
   void refreshPendingProposals();
 }
