@@ -1130,7 +1130,9 @@ async function refreshPendingProposals() {
 
   if (proposals.length === 0) {
     container.innerHTML = `<p class="placeholder">No pending proposals yet.</p>
-      <p class="placeholder proposal-empty-hint">Run <strong>Analyze paragraphs</strong> to generate merge or low-confidence proposals; they are stored on the server. If this never fills after a successful analyze, open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a> and confirm <code>postgresOk</code> is true when using <code>DATABASE_URL</code> (Railway).</p>`;
+      <p class="placeholder proposal-empty-hint">This list only shows proposals with status <strong>pending</strong> (approved/rejected/applied disappear here).</p>
+      <p class="placeholder proposal-empty-hint">Proposals are written to the database only when <strong>Analyze paragraphs</strong> uses the <strong>backend</strong> (<code>/api/analyze</code>). If the status line says the backend failed and switched to a local heuristic, nothing is saved—open DevTools → Console / Network to see the <code>/api/analyze</code> error (often missing <code>OPENAI_API_KEY</code> or a 4xx/5xx).</p>
+      <p class="placeholder proposal-empty-hint">If analyze completed via the backend but this stays empty, open <a href="/api/health" target="_blank" rel="noopener"><code>/api/health</code></a> (<code>postgresOk</code> with <code>DATABASE_URL</code>) and <a href="/api/proposals" target="_blank" rel="noopener"><code>/api/proposals</code></a> to see whether any rows exist at all.</p>`;
     return;
   }
 
@@ -1249,7 +1251,7 @@ async function handleAnalyzeClick() {
     console.warn("Backend /api/analyze failed; falling back to local matching.", e);
   }
 
-  // Local fallback
+  // Local fallback (does not POST proposals to the server—only backend /api/analyze does)
   statusEl.textContent = "Backend unavailable; running local heuristic…";
   if (!flattenedSnippets && !dataLoadError) {
     await loadClaimsData();
@@ -1270,7 +1272,8 @@ async function handleAnalyzeClick() {
   renderResults(withMatches);
   const bundleBit =
     artifactBundleVersion != null ? ` · artifact ${artifactBundleVersion}` : "";
-  statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}.`;
+  statusEl.textContent = `Analyzed ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}${bundleBit}. Local matching only—proposals are not saved (fix /api/analyze, e.g. OPENAI_API_KEY, to persist to Postgres).`;
+  statusEl.classList.add("error-text");
   btn.disabled = false;
   void refreshPendingProposals();
 }
