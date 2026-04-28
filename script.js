@@ -3,12 +3,15 @@ const SUPERCLAIMS_URL = "greenwashing_superclaims.json";
 const CODEBOOK_URL = "greenwashing_codebook.json";
 const CLAIM_SUPERCLAIM_MAP_URL = "claim_superclaim_map.json";
 const COLLAPSE_MAP_URL = "subclaim_bertopic_collapse.json";
+const SUPERCLAIM_SIM_URL = "superclaim_similarity.json";
 
 let flattenedSnippets = null;
 /** @type {string | null} */
 let artifactBundleVersion = null;
 /** @type {Map<string, { topicId: number, collapseFlag: boolean, collapseWith: string[], topicLabel?: string, hierarchyConfidence?: number }> | null} */
 let collapseBySubclaim = null;
+/** @type {Map<string, { maxSimilarity: number, similarFlag: boolean, similarWith?: { id: string, similarity: number }[] }> | null} */
+let superclaimSimilarityById = null;
 /** @type {Map<string, { superclaimId: string, superclaimText: string }> | null} subclaim → mapped superclaim (from loaded JSON) */
 let superclaimMappingBySubclaim = null;
 let dataLoadError = null;
@@ -194,6 +197,38 @@ async function loadClaimsData() {
       }
     } catch {
       // Missing or invalid collapse file: UI continues without collapse hints.
+    }
+
+    // Superclaim similarity (offline artifact; optional).
+    superclaimSimilarityById = new Map();
+    try {
+      const simRes = await fetch(SUPERCLAIM_SIM_URL);
+      if (simRes.ok) {
+        const simJson = await simRes.json();
+        const sc = simJson.superclaims || {};
+        for (const [scid, row] of Object.entries(sc)) {
+          if (!row || typeof row !== "object") continue;
+          const maxSim = Number(row.max_similarity);
+          const similarWith = Array.isArray(row.similar_with)
+            ? row.similar_with
+                .map((r) => {
+                  if (!r || typeof r !== "object") return null;
+                  return {
+                    id: String(r.id || ""),
+                    similarity: Number(r.similarity),
+                  };
+                })
+                .filter((x) => x && x.id && Number.isFinite(x.similarity))
+            : [];
+          superclaimSimilarityById.set(String(scid), {
+            maxSimilarity: Number.isFinite(maxSim) ? maxSim : 0,
+            similarFlag: Boolean(row.similar_flag),
+            similarWith,
+          });
+        }
+      }
+    } catch {
+      // Missing or invalid superclaim similarity file: UI continues without similarity hints.
     }
 
     const superclaimsById = loadIdTextMap(superJson, "superclaim");
@@ -594,17 +629,24 @@ function clamp01(x) {
 }
 
 function formatTopicChipHtml(subclaimId) {
-  if (!collapseBySubclaim || !collapseBySubclaim.size) {
-    return `<div class="topic-chip topic-chip--none">⚠ No artifact loaded</div>`;
+  // Backwards-compat shim: keep the old function name but switch the meaning
+  // from "subclaim topic cluster" to "superclaim similar to another superclaim".
+  // Callers should pass a superclaim id.
+  const superclaimId = String(subclaimId || "");
+  if (!superclaimSimilarityById || !superclaimSimilarityById.size) {
+    return `<div class="topic-chip topic-chip--none">⚠ No superclaim similarity artifact</div>`;
   }
-  const row = collapseBySubclaim.get(String(subclaimId || ""));
-  if (!row) return `<div class="topic-chip topic-chip--none">⚠ No BERTopic row</div>`;
-  const tid = Number.isFinite(row.topicId) ? row.topicId : "";
-  const peers = Array.isArray(row.collapseWith) ? row.collapseWith : [];
-  if (!row.collapseFlag || peers.length === 0) {
-    return `<div class="topic-chip topic-chip--none">⚠ Unique Topic${tid !== "" ? ` (${tid})` : ""}</div>`;
-  }
-  return `<div class="topic-chip topic-chip--match">Topic cluster${tid !== "" ? ` (${tid})` : ""}</div>`;
+  const row = superclaimSimilarityById.get(superclaimId);
+  if (!row) return `<div class="topic-chip topic-chip--none">⚠ No similarity row</div>`;
+  if (!row.similarFlag) return `<div class="topic-chip topic-chip--none">Unique superclaim</div>`;
+  const peers = Array.isArray(row.similarWith) ? row.similarWith : [];
+  const count = peers.length;
+  const pct = Number.isFinite(row.maxSimilarity)
+    ? Math.round(clamp01(row.maxSimilarity) * 100)
+    : null;
+  const detail =
+    pct != null ? ` · max ${pct}%` : "";
+  return `<div class="topic-chip topic-chip--match">Similar superclaim${count ? ` (${count})` : ""}${detail}</div>`;
 }
 
 function renderResultsRedesigned(paragraphsWithMatches) {
@@ -656,7 +698,7 @@ function renderResultsRedesigned(paragraphsWithMatches) {
                   )}</span></span>
                 </div>
                 <div class="claim-text">${escapeHtml(m.superclaimText || "")}</div>
-                ${formatTopicChipHtml(m.subclaimId)}
+                ${formatTopicChipHtml(m.superclaimId)}
                 <div class="sim-row" style="margin-top:8px">
                   <span class="sim-label">Similarity</span>
                   <div class="sim-bar-wrap"><div class="sim-bar-fill sim-bar-fill--amber" style="width:${Math.round(
