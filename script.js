@@ -1259,9 +1259,8 @@ function formatProposalBodyHtml(p) {
 }
 
 async function refreshPendingProposals() {
-  if (isRedesignedUi()) {
-    const list = document.getElementById("proposals-list");
-    if (!list) return;
+  const list = document.getElementById("proposals-list");
+  if (list) {
     list.innerHTML = `<div class="empty-note">Loading pending proposals…</div>`;
     let proposals = [];
     try {
