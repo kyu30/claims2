@@ -440,7 +440,7 @@ function formatCollapseMeta(subclaimId, currentSuperclaimId) {
           ${hier.html}
           <span class="collapse-badge">Topic cluster</span>
           ${labelBlock}
-          <div class="collapse-stale-cluster-msg">
+          <div class="collapse-cluster-hint collapse-cluster-hint--error">
             The offline artifact lists ${peersArtifact.length} cluster peer subclaim${peersArtifact.length === 1 ? "" : "s"}, but none appear in your current <code>claim_superclaim_map</code>. Regenerate <code>subclaim_bertopic_collapse.json</code> or refresh the map so collapse targets stay in sync.
           </div>
         </div>
@@ -468,7 +468,7 @@ function formatCollapseMeta(subclaimId, currentSuperclaimId) {
           ${hier.html}
           <span class="collapse-badge">Topic cluster</span>
           ${labelBlock}
-          <div class="collapse-stale-cluster-msg">
+          <div class="collapse-cluster-hint collapse-cluster-hint--muted">
             Cluster peers exist, but collapse targets are hidden because the offline cosine similarity is below <strong>${MIN_COLLAPSE_SIMILARITY.toFixed(
               2
             )}</strong>.
