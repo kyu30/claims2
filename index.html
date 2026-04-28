@@ -1,5 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Native Ads Claim Mapping</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Optional: absolute API origin when this page is not served with a same-origin /api/* proxy (see vercel.json).
+         Leave empty to use same-origin /api first, then localhost:8001 when on loopback. -->
+    <meta name="claims-api-base" content="" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Paragraph-Level Claim Mapping</h1>
+        <p>Paste an article below.</p>
+      </header>
+
+      <section class="input-section">
+        <label for="article-input" class="field-label">Article text</label>
+        <textarea
+          id="article-input"
+          class="text-input"
+          rows="10"
+          placeholder="Paste article text here… Separate paragraphs with a blank line."
+        ></textarea>
+
+        <div class="controls">
+          <button id="analyze-btn" class="primary-btn">Analyze paragraphs</button>
+          <span id="status" class="status-text"></span>
+        </div>
+      </section>
+
+      <section class="results-section">
+        <h2>Paragraph ↔ Claim mappings</h2>
+        <div id="results-container" class="results-container">
+          <p class="placeholder">
+            No results yet. Paste an article and click “Analyze paragraphs”.
+          </p>
+        </div>
+      </section>
+
+      <section class="results-section">
+        <h2>Pending taxonomy proposals (human approval)</h2>
+        <div class="reviewer-row">
+          <label for="reviewer-name" class="field-label">Reviewer name</label>
+          <input
+            id="reviewer-name"
+            class="text-input reviewer-input"
+            type="text"
+            maxlength="120"
+            placeholder="Your name (stored locally in this browser)"
+            autocomplete="name"
+          />
+        </div>
+        <div id="proposals-container" class="results-container">
+          <p class="placeholder">No pending proposals yet.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
