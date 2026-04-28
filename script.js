@@ -1376,7 +1376,7 @@ async function refreshPendingProposals() {
         ${bodyLine ? `<div class="proposal-body">${bodyLine}</div>` : ""}
         ${mergeDetail}
         ${scoreRow}
-        ${rationale ? `<div style="font-size:12px;color:var(--text-3);margin-bottom:12px">${escapeHtml(rationale)}</div>` : ""}
+        ${rationale ? `<div class="score-note">${escapeHtml(rationale)}</div>` : ""}
         <div class="proposal-actions">
           <button class="btn-approve" type="button" data-action="approve" data-id="${escapeHtmlAttr(
             p.id || ""
@@ -1392,6 +1392,13 @@ async function refreshPendingProposals() {
 
       list.appendChild(card);
     });
+
+    // Match the static mock's footer note.
+    const footer = document.createElement("div");
+    footer.className = "empty-note";
+    footer.textContent =
+      "No further proposals. Run the taxonomy diagnosis pipeline to generate new proposals.";
+    list.appendChild(footer);
 
     list.querySelectorAll("button[data-action]").forEach((btn) => {
       btn.addEventListener("click", async (ev) => {
