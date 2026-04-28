@@ -1123,17 +1123,21 @@ function formatProposalBodyHtml(p) {
     const removeText = String(payload.removeSubclaimText || "").trim();
     const mergeTexts =
       canonText || removeText
-        ? `<div class="proposal-merge-claims">
-            <div class="proposal-merge-claim"><span class="proposal-merge-label">Keep (canonical)</span><div class="proposal-merge-body">${escapeHtml(
-              canonText || "(no text in payload)"
-            )}</div><code class="proposal-merge-id">${escapeHtml(
-              payload.canonicalSubclaimId || ""
-            )}</code></div>
-            <div class="proposal-merge-claim"><span class="proposal-merge-label">Merge away</span><div class="proposal-merge-body">${escapeHtml(
-              removeText || "(no text in payload)"
-            )}</div><code class="proposal-merge-id">${escapeHtml(
-              payload.removeSubclaimId || ""
-            )}</code></div>
+        ? `<div class="merge-detail">
+            <div class="merge-item">
+              <div class="merge-item-label">Keep (canonical)</div>
+              <div class="merge-item-id">${escapeHtml(payload.canonicalSubclaimId || "")}</div>
+              <div class="merge-item-text">${escapeHtml(
+                canonText || "(no text in payload)"
+              )}</div>
+            </div>
+            <div class="merge-item">
+              <div class="merge-item-label">Merge away</div>
+              <div class="merge-item-id">${escapeHtml(payload.removeSubclaimId || "")}</div>
+              <div class="merge-item-text">${escapeHtml(
+                removeText || "(no text in payload)"
+              )}</div>
+            </div>
           </div>`
         : "";
     const idLines =
@@ -1170,17 +1174,21 @@ function formatProposalBodyHtml(p) {
     const removeText = String(payload.removeSuperclaimText || "").trim();
     const mergeTexts =
       canonText || removeText
-        ? `<div class="proposal-merge-claims">
-            <div class="proposal-merge-claim"><span class="proposal-merge-label">Keep (canonical)</span><div class="proposal-merge-body">${escapeHtml(
-              canonText || "(no text in payload)"
-            )}</div><code class="proposal-merge-id">${escapeHtml(
-              payload.canonicalSuperclaimId || ""
-            )}</code></div>
-            <div class="proposal-merge-claim"><span class="proposal-merge-label">Merge away</span><div class="proposal-merge-body">${escapeHtml(
-              removeText || "(no text in payload)"
-            )}</div><code class="proposal-merge-id">${escapeHtml(
-              payload.removeSuperclaimId || ""
-            )}</code></div>
+        ? `<div class="merge-detail">
+            <div class="merge-item">
+              <div class="merge-item-label">Keep (canonical)</div>
+              <div class="merge-item-id">${escapeHtml(payload.canonicalSuperclaimId || "")}</div>
+              <div class="merge-item-text">${escapeHtml(
+                canonText || "(no text in payload)"
+              )}</div>
+            </div>
+            <div class="merge-item">
+              <div class="merge-item-label">Merge away</div>
+              <div class="merge-item-id">${escapeHtml(payload.removeSuperclaimId || "")}</div>
+              <div class="merge-item-text">${escapeHtml(
+                removeText || "(no text in payload)"
+              )}</div>
+            </div>
           </div>`
         : "";
     const idLines =
