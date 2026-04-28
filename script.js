@@ -1478,28 +1478,35 @@ async function refreshPendingProposals() {
 
   proposals.forEach((p) => {
     if (p && p.id) byId.set(String(p.id), p);
-    const card = document.createElement("article");
-    card.className = "paragraph-result-card pending-proposal-card";
-    const isNewSuperclaim = p.type === "new_superclaim";
-    const topSections = isNewSuperclaim
-      ? formatNewSuperclaimSectionsHtml(p)
-      : `<div class="proposal-paragraph">${escapeHtml(p.paragraph || "")}</div>`;
-    const badgeText = formatProposalTitle(p).slice(0, 1).toUpperCase();
+    const card = document.createElement("div");
+    card.className = "proposal-card";
+
+    const type = formatProposalTitle(p);
+    const icon =
+      p.type === "merge_superclaims" || p.type === "merge_subclaims"
+        ? "⇄"
+        : p.type === "link_subclaim_to_superclaim"
+          ? "↪"
+          : p.type === "new_superclaim"
+            ? "+"
+            : "•";
+
+    const bodyLine = escapeHtml(String(p.paragraph || "").trim());
 
     card.innerHTML = `
-      <header class="paragraph-result-header pending-proposal-header">
-        <div class="paragraph-result-badge pending-proposal-badge">${escapeHtml(badgeText)}</div>
-        <div class="paragraph-result-header-text">
-          <div class="paragraph-result-title">${escapeHtml(formatProposalTitle(p))}</div>
-          <div class="paragraph-result-sub"><code>${escapeHtml(p.id || "")}</code></div>
+      <div class="proposal-header">
+        <div class="proposal-icon">${escapeHtml(icon)}</div>
+        <div>
+          <div class="proposal-type">${escapeHtml(type)}</div>
+          <div class="proposal-id">${escapeHtml(p.id || "")}</div>
         </div>
-      </header>
-      <div class="pending-proposal-top">${topSections}</div>
-      <div class="pending-proposal-body">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
-      <div class="pending-proposal-actions">
-        <button class="action-btn" data-action="approve" data-id="${escapeHtmlAttr(p.id || "")}">Approve</button>
-        <button class="action-btn action-btn--danger" data-action="reject" data-id="${escapeHtmlAttr(p.id || "")}">Reject</button>
-        <button class="action-btn action-btn--accent" data-action="apply" data-id="${escapeHtmlAttr(p.id || "")}">Apply</button>
+      </div>
+      ${bodyLine ? `<div class="proposal-body">${bodyLine}</div>` : ""}
+      <div style="padding:0 16px 4px">${formatProposalBodyHtml(p)}${formatProposalMetaHtml(p)}</div>
+      <div class="proposal-actions">
+        <button class="btn-approve" data-action="approve" data-id="${escapeHtmlAttr(p.id || "")}">✓ Approve</button>
+        <button class="btn-reject" data-action="reject" data-id="${escapeHtmlAttr(p.id || "")}">✕ Reject</button>
+        <button class="btn-apply" data-action="apply" data-id="${escapeHtmlAttr(p.id || "")}">Apply to CSV →</button>
       </div>
     `;
     wrap.appendChild(card);
@@ -1515,7 +1522,7 @@ async function refreshPendingProposals() {
       const id = el.getAttribute("data-id");
       if (!id || !action) return;
 
-      const card = el.closest("article");
+      const card = el.closest(".proposal-card");
       const cardButtons = card ? Array.from(card.querySelectorAll("button[data-action]")) : [el];
       cardButtons.forEach((b) => (b.disabled = true));
       try {
