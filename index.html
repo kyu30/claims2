@@ -1,59 +1,771 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Native Ads Claim Mapping</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Optional: absolute API origin when this page is not served with a same-origin /api/* proxy (see vercel.json). Leave empty to use same-origin /api first, then localhost:8001 when on loopback. Example only if needed: https://your-backend.vercel.app -->
-  <meta name="claims-api-base" content="" />
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLAIMS 2.0 — Redesigned</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:           #080c18;
+    --bg-1:         #0d1424;
+    --bg-2:         #111827;
+    --border:       rgba(255,255,255,0.07);
+    --border-mid:   rgba(255,255,255,0.12);
+    --text:         #f1f5f9;
+    --text-2:       #94a3b8;
+    --text-3:       #64748b;
+
+    --teal:         #0d9488;
+    --teal-bg:      rgba(13,148,136,0.1);
+    --teal-border:  rgba(13,148,136,0.35);
+    --teal-text:    #5eead4;
+
+    --amber:        #d97706;
+    --amber-bg:     rgba(217,119,6,0.1);
+    --amber-border: rgba(217,119,6,0.35);
+    --amber-text:   #fcd34d;
+
+    --green:        #059669;
+    --green-bg:     rgba(5,150,105,0.12);
+    --green-border: rgba(5,150,105,0.4);
+    --green-text:   #34d399;
+
+    --red:          #dc2626;
+    --red-bg:       rgba(220,38,38,0.1);
+    --red-border:   rgba(220,38,38,0.35);
+    --red-text:     #f87171;
+
+    --blue:         #3b82f6;
+    --blue-bg:      rgba(59,130,246,0.1);
+    --blue-border:  rgba(59,130,246,0.35);
+    --blue-text:    #93c5fd;
+
+    --purple-bg:    rgba(139,92,246,0.1);
+    --purple-border:rgba(139,92,246,0.35);
+    --purple-text:  #c4b5fd;
+
+    --r: 12px;
+    --r-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    border: 1px solid var(--border-mid);
+    border-radius: 20px;
+    padding: 20px 24px;
+    background: var(--bg-1);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--teal), var(--blue), var(--amber));
+  }
+  .header-inner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .header-sub {
+    font-size: 13px;
+    color: var(--text-2);
+    margin-top: 3px;
+  }
+  .stats-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .stat-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .stat-chip strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stat-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── INPUT SECTION ── */
+  .input-section {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--bg-1);
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .field-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 8px;
+    display: block;
+  }
+  .text-input {
+    width: 100%;
+    min-height: 140px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 12px 14px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .text-input:focus {
+    border-color: rgba(59,130,246,0.5);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.08);
+  }
+  .text-input::placeholder { color: var(--text-3); }
+  .controls { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
+  .btn-primary {
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 8px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.15s;
+    box-shadow: 0 4px 16px rgba(37,99,235,0.4);
+  }
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .status { font-size: 12px; color: var(--text-3); }
+
+  /* ── SECTION TITLE ── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin: 24px 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── PARAGRAPH RESULT CARD ── */
+  .para-card {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--bg-1);
+    overflow: hidden;
+    margin-bottom: 14px;
+    transition: border-color 0.15s;
+  }
+  .para-card:hover { border-color: var(--border-mid); }
+
+  .para-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border);
+  }
+  .para-num {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: var(--blue-bg);
+    border: 1px solid var(--blue-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--blue-text);
+    flex-shrink: 0;
+  }
+  .para-card-title { font-size: 13px; font-weight: 500; }
+  .para-card-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+  .para-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+  }
+  .para-col {
+    padding: 14px 16px;
+    border-right: 1px solid var(--border);
+  }
+  .para-col:last-child { border-right: none; }
+
+  .col-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+
+  /* paragraph text column */
+  .para-text-block {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-2);
+    border-left: 2px solid var(--blue-border);
+    padding-left: 10px;
+  }
+
+  /* claim block */
+  .claim-block {
+    padding: 10px 12px;
+    border-radius: var(--r-sm);
+    border: 1px solid;
+    margin-bottom: 8px;
+    background: transparent;
+  }
+  .claim-block:last-child { margin-bottom: 0; }
+
+  .claim-block--sub {
+    border-color: var(--teal-border);
+    background: var(--teal-bg);
+  }
+  .claim-block--super {
+    border-color: var(--amber-border);
+    background: var(--amber-bg);
+  }
+
+  .claim-type-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .claim-type-tag--sub {
+    background: var(--teal-bg);
+    border: 1px solid var(--teal-border);
+    color: var(--teal-text);
+  }
+  .claim-type-tag--super {
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
+    color: var(--amber-text);
+  }
+  .claim-id-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.8;
+  }
+  .claim-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+    margin-top: 4px;
+  }
+
+  /* similarity bar */
+  .sim-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .sim-label {
+    font-size: 10px;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+  .sim-bar-wrap {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .sim-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--teal), #22d3ee);
+    transition: width 0.4s;
+  }
+  .sim-bar-fill--amber {
+    background: linear-gradient(90deg, var(--amber), #fbbf24);
+  }
+  .sim-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-2);
+    min-width: 28px;
+    text-align: right;
+  }
+
+  .topic-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+  .topic-chip--none {
+    background: var(--red-bg);
+    border: 1px solid var(--red-border);
+    color: var(--red-text);
+  }
+  .topic-chip--match {
+    background: var(--green-bg);
+    border: 1px solid var(--green-border);
+    color: var(--green-text);
+  }
+  .no-match-note {
+    font-size: 12px;
+    color: var(--text-3);
+    font-style: italic;
+  }
+
+  /* ── PROPOSAL SECTION ── */
+  .proposals-container {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--bg-1);
+    overflow: hidden;
+  }
+
+  .reviewer-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .reviewer-input {
+    flex: 1;
+    max-width: 280px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 7px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .reviewer-input:focus { border-color: rgba(59,130,246,0.5); }
+  .reviewer-input::placeholder { color: var(--text-3); }
+
+  .proposal-card {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .proposal-card:last-child { border-bottom: none; }
+  .proposal-card:hover { background: rgba(255,255,255,0.02); }
+
+  .proposal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .proposal-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .proposal-type { font-size: 13px; font-weight: 600; }
+  .proposal-id {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 2px;
+  }
+
+  .proposal-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-2);
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.2);
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+
+  .merge-detail {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .merge-item {
+    padding: 8px 12px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.15);
+  }
+  .merge-item-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 4px;
+  }
+  .merge-item-id {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-2);
+    margin-bottom: 3px;
+  }
+  .merge-item-text { font-size: 12px; color: var(--text); }
+
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--r-sm);
+    background: var(--green-bg);
+    border: 1px solid var(--green-border);
+    margin-bottom: 12px;
+  }
+  .score-label { font-size: 12px; color: var(--text-2); }
+  .score-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--green-text);
+    margin-left: auto;
+  }
+  .score-note { font-size: 11px; color: var(--text-3); }
+
+  .proposal-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn-approve {
+    padding: 7px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--green-border);
+    background: var(--green-bg);
+    color: var(--green-text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.15s;
+  }
+  .btn-approve:hover { filter: brightness(1.2); transform: translateY(-1px); }
+
+  .btn-reject {
+    padding: 7px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--red-border);
+    background: var(--red-bg);
+    color: var(--red-text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.15s;
+  }
+  .btn-reject:hover { filter: brightness(1.2); transform: translateY(-1px); }
+
+  .btn-apply {
+    padding: 7px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--blue-border);
+    background: var(--blue-bg);
+    color: var(--blue-text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-left: auto;
+    transition: filter 0.15s, transform 0.15s;
+  }
+  .btn-apply:hover { filter: brightness(1.2); transform: translateY(-1px); }
+
+  .empty-note {
+    padding: 20px 16px;
+    font-size: 13px;
+    color: var(--text-3);
+    text-align: center;
+  }
+
+  @media (max-width: 640px) {
+    .para-grid { grid-template-columns: 1fr; }
+    .para-col { border-right: none; border-bottom: 1px solid var(--border); }
+    .para-col:last-child { border-bottom: none; }
+    .merge-detail { grid-template-columns: 1fr; }
+  }
+</style>
 </head>
 <body>
-  <main class="app">
-    <header class="app-header">
-      <h1>Paragraph-Level Claim Mapping</h1>
-      <p>
-        Paste an article below.
-      </p>
-    </header>
+<div class="shell">
 
-    <section class="input-section">
-      <label for="article-input" class="field-label">Article text</label>
-      <textarea id="article-input" class="text-input" rows="10" placeholder="Paste article text here… Separate paragraphs with a blank line."></textarea>
-
-      <div class="controls">
-        <button id="analyze-btn" class="primary-btn">Analyze paragraphs</button>
-        <span id="status" class="status-text"></span>
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-inner">
+      <div>
+        <div class="header-title">Paragraph ↔ Claim Mapping</div>
+        <div class="header-sub">CLAIMS 2.0 · Greenwashing discourse validation · Native advertising corpus</div>
       </div>
-    </section>
-
-    <section class="results-section">
-      <h2>Paragraph ↔ Claim mappings</h2>
-      <div id="results-container" class="results-container">
-        <p class="placeholder">No results yet. Paste an article and click “Analyze paragraphs”.</p>
+    </div>
+    <div class="stats-row">
+      <div class="stat-chip">
+        <span class="stat-dot" style="background:#3b82f6"></span>
+        <strong>20</strong> paragraphs
       </div>
-    </section>
-
-    <section class="results-section">
-      <h2>Pending taxonomy proposals (human approval)</h2>
-      <div class="reviewer-row">
-        <label for="reviewer-name" class="field-label">Reviewer name</label>
-        <input
-          id="reviewer-name"
-          class="text-input reviewer-input"
-          type="text"
-          maxlength="120"
-          placeholder="Your name (stored locally in this browser)"
-          autocomplete="name"
-        />
+      <div class="stat-chip">
+        <span class="stat-dot" style="background:var(--teal)"></span>
+        <strong>31</strong> subclaims
       </div>
-      <div id="proposals-container" class="results-container">
-        <p class="placeholder">No pending proposals yet.</p>
+      <div class="stat-chip">
+        <span class="stat-dot" style="background:var(--amber)"></span>
+        <strong>18</strong> superclaims
       </div>
-    </section>
-  </main>
+      <div class="stat-chip">
+        <span class="stat-dot" style="background:#a855f7"></span>
+        <strong>3</strong> pending proposals
+      </div>
+    </div>
+  </div>
 
-  <script src="script.js"></script>
+  <!-- INPUT -->
+  <div class="input-section">
+    <label class="field-label">Article Text</label>
+    <textarea class="text-input" placeholder="Paste article text here… Separate paragraphs with a blank line."></textarea>
+    <div class="controls">
+      <button class="btn-primary">Analyze Paragraphs</button>
+      <span class="status">20 paragraphs loaded</span>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="section-title">Paragraph ↔ Claim Mappings</div>
+
+  <!-- Card 1 -->
+  <div class="para-card">
+    <div class="para-card-header">
+      <div class="para-num">1</div>
+      <div>
+        <div class="para-card-title">Paragraph 1 of 20</div>
+        <div class="para-card-sub">Maps below apply only to this paragraph.</div>
+      </div>
+    </div>
+    <div class="para-grid">
+      <div class="para-col">
+        <div class="col-label">Paragraph Text</div>
+        <div class="para-text-block">
+          Amid the climate crisis, the private and the public sectors are seeking strategies for achieving net-zero emissions. But their road maps are often different, and it's not clear who should be leading the way.
+        </div>
+      </div>
+      <div class="para-col">
+        <div class="col-label">Subclaim(s)</div>
+        <div class="claim-block claim-block--sub">
+          <div>
+            <span class="claim-type-tag claim-type-tag--sub">Subclaim <span class="claim-id-badge">NC_89</span></span>
+          </div>
+          <div class="claim-text">CCS is essential to achieving net-zero emissions targets</div>
+          <div class="sim-row">
+            <span class="sim-label">Similarity</span>
+            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:2%"></div></div>
+            <span class="sim-val">0.02</span>
+          </div>
+        </div>
+      </div>
+      <div class="para-col">
+        <div class="col-label">Superclaim(s)</div>
+        <div class="claim-block claim-block--super">
+          <div>
+            <span class="claim-type-tag claim-type-tag--super">Superclaim <span class="claim-id-badge">SC_25</span></span>
+          </div>
+          <div class="claim-text">Limits of alternative zero-emission aviation fuels due to technical challenges</div>
+          <div class="topic-chip topic-chip--none">⚠ Unique Topic (−1)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 2 -->
+  <div class="para-card">
+    <div class="para-card-header">
+      <div class="para-num">2</div>
+      <div>
+        <div class="para-card-title">Paragraph 2 of 20</div>
+        <div class="para-card-sub">Maps below apply only to this paragraph.</div>
+      </div>
+    </div>
+    <div class="para-grid">
+      <div class="para-col">
+        <div class="col-label">Paragraph Text</div>
+        <div class="para-text-block">
+          For this custom research, Atlantic Insights, the marketing research team at The Atlantic, partnered with Southern Company to survey 318 public- and private-sector officials, from CEOs to policymakers and elected representatives.
+        </div>
+      </div>
+      <div class="para-col">
+        <div class="col-label">Subclaim(s)</div>
+        <div class="claim-block claim-block--sub">
+          <div>
+            <span class="claim-type-tag claim-type-tag--sub">Subclaim <span class="claim-id-badge">NC_175</span></span>
+          </div>
+          <div class="claim-text">Establishment of specialized research centers to promote fossil fuel technology and an ambiguous 'energy transition'</div>
+          <div class="sim-row">
+            <span class="sim-label">Similarity</span>
+            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:54%"></div></div>
+            <span class="sim-val">0.54</span>
+          </div>
+        </div>
+      </div>
+      <div class="para-col">
+        <div class="col-label">Superclaim(s)</div>
+        <div class="claim-block claim-block--super">
+          <div>
+            <span class="claim-type-tag claim-type-tag--super">Superclaim <span class="claim-id-badge">SC_2</span></span>
+          </div>
+          <div class="claim-text">Oil is important for the energy transition</div>
+          <div class="topic-chip topic-chip--none">⚠ No BERTopic row</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROPOSALS -->
+  <div class="section-title" style="margin-top:28px">Pending Taxonomy Proposals <span style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.35);color:#c4b5fd;font-size:10px;padding:2px 8px;border-radius:999px;letter-spacing:0.06em;font-weight:600;margin-left:4px">Human Approval</span></div>
+
+  <div class="proposals-container">
+    <div class="reviewer-row">
+      <label class="field-label" style="margin:0;white-space:nowrap">Reviewer Name</label>
+      <input type="text" class="reviewer-input" placeholder="Your name (stored locally)" />
+    </div>
+
+    <!-- Proposal card -->
+    <div class="proposal-card">
+      <div class="proposal-header">
+        <div class="proposal-icon">⇄</div>
+        <div>
+          <div class="proposal-type">Merge Superclaims</div>
+          <div class="proposal-id">prop_ee21aba40d</div>
+        </div>
+      </div>
+
+      <div class="proposal-body">
+        Maximizing upsides — Although ending routine flaring is a big step forward, the Moho Nord project strove to develop other positive environmental impacts.
+      </div>
+
+      <div class="merge-detail">
+        <div class="merge-item">
+          <div class="merge-item-label">Keep (canonical)</div>
+          <div class="merge-item-id">SC_39</div>
+          <div class="merge-item-text">Biomonitoring and advanced environmental monitoring as green credentials</div>
+        </div>
+        <div class="merge-item">
+          <div class="merge-item-label">Merge away</div>
+          <div class="merge-item-id">SC_9</div>
+          <div class="merge-item-text">Biomonitoring and advanced environmental monitoring as green credentials</div>
+        </div>
+      </div>
+
+      <div class="score-row">
+        <span class="sim-label">TF-IDF Cosine Similarity</span>
+        <div class="sim-bar-wrap" style="flex:1">
+          <div class="sim-bar-fill sim-bar-fill--amber" style="width:100%"></div>
+        </div>
+        <span class="score-val">1.000</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-bottom:12px">
+        High TF-IDF cosine similarity between superclaim texts (1.00) — consider merging superclaims.
+      </div>
+
+      <div class="proposal-actions">
+        <button class="btn-approve">✓ Approve</button>
+        <button class="btn-reject">✕ Reject</button>
+        <button class="btn-apply">Apply to CSV →</button>
+      </div>
+    </div>
+
+    <div class="empty-note">
+      No further proposals. Run the taxonomy diagnosis pipeline to generate new proposals.
+    </div>
+  </div>
+
+</div>
 </body>
 </html>
-
