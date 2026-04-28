@@ -630,7 +630,6 @@ function renderResultsRedesigned(paragraphsWithMatches) {
     const subBlocks = (Array.isArray(matches) ? matches : []).length
       ? matches
           .map((m) => {
-            const conf = clamp01(m.confidence);
             return `
               <div class="claim-block claim-block--sub">
                 <div>
@@ -639,13 +638,6 @@ function renderResultsRedesigned(paragraphsWithMatches) {
                   )}</span></span>
                 </div>
                 <div class="claim-text">${escapeHtml(m.subclaimText || "")}</div>
-                <div class="sim-row">
-                  <span class="sim-label">Similarity</span>
-                  <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${Math.round(
-                    conf * 100
-                  )}%"></div></div>
-                  <span class="sim-val">${conf.toFixed(2)}</span>
-                </div>
               </div>
             `;
           })
@@ -666,7 +658,7 @@ function renderResultsRedesigned(paragraphsWithMatches) {
                 <div class="claim-text">${escapeHtml(m.superclaimText || "")}</div>
                 ${formatTopicChipHtml(m.subclaimId)}
                 <div class="sim-row" style="margin-top:8px">
-                  <span class="sim-label">Confidence</span>
+                  <span class="sim-label">Similarity</span>
                   <div class="sim-bar-wrap"><div class="sim-bar-fill sim-bar-fill--amber" style="width:${Math.round(
                     conf * 100
                   )}%"></div></div>
