@@ -246,6 +246,10 @@ async function loadClaimsData() {
     }
 
     flattenedSnippets = snippets;
+    if (isRedesignedUi()) {
+      setTextIfPresent("stat-subclaims", codebookById.size);
+      setTextIfPresent("stat-superclaims", superclaimsById.size);
+    }
   } catch (err) {
     console.error("Failed to load claim data:", err);
     dataLoadError = err;
@@ -565,7 +569,148 @@ function longestCommonSubstr(a, b) {
   return a.slice(endIdx - longest, endIdx);
 }
 
+function isRedesignedUi() {
+  try {
+    return (
+      Boolean(document.querySelector(".shell")) &&
+      Boolean(document.getElementById("results-container")) &&
+      Boolean(document.getElementById("proposals-list"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function setTextIfPresent(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = String(value);
+}
+
+function clamp01(x) {
+  const n = typeof x === "number" ? x : Number(x);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+function formatTopicChipHtml(subclaimId) {
+  if (!collapseBySubclaim || !collapseBySubclaim.size) {
+    return `<div class="topic-chip topic-chip--none">⚠ No artifact loaded</div>`;
+  }
+  const row = collapseBySubclaim.get(String(subclaimId || ""));
+  if (!row) return `<div class="topic-chip topic-chip--none">⚠ No BERTopic row</div>`;
+  const tid = Number.isFinite(row.topicId) ? row.topicId : "";
+  const peers = Array.isArray(row.collapseWith) ? row.collapseWith : [];
+  if (!row.collapseFlag || peers.length === 0) {
+    return `<div class="topic-chip topic-chip--none">⚠ Unique Topic${tid !== "" ? ` (${tid})` : ""}</div>`;
+  }
+  return `<div class="topic-chip topic-chip--match">Topic cluster${tid !== "" ? ` (${tid})` : ""}</div>`;
+}
+
+function renderResultsRedesigned(paragraphsWithMatches) {
+  const container = document.getElementById("results-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!paragraphsWithMatches.length) {
+    container.innerHTML = `<div class="empty-note">No results yet. Paste an article and click “Analyze Paragraphs”.</div>`;
+    setTextIfPresent("stat-paragraphs", 0);
+    return;
+  }
+
+  setTextIfPresent("stat-paragraphs", paragraphsWithMatches.length);
+
+  paragraphsWithMatches.forEach(({ paragraph, matches }, idx) => {
+    const card = document.createElement("div");
+    card.className = "para-card";
+
+    const title = `Paragraph ${idx + 1} of ${paragraphsWithMatches.length}`;
+    const paraHtml = escapeHtml(paragraph || "");
+
+    const subBlocks = (Array.isArray(matches) ? matches : []).length
+      ? matches
+          .map((m) => {
+            const conf = clamp01(m.confidence);
+            return `
+              <div class="claim-block claim-block--sub">
+                <div>
+                  <span class="claim-type-tag claim-type-tag--sub">Subclaim <span class="claim-id-badge">${escapeHtml(
+                    m.subclaimId || ""
+                  )}</span></span>
+                </div>
+                <div class="claim-text">${escapeHtml(m.subclaimText || "")}</div>
+                <div class="sim-row">
+                  <span class="sim-label">Similarity</span>
+                  <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:${Math.round(
+                    conf * 100
+                  )}%"></div></div>
+                  <span class="sim-val">${conf.toFixed(2)}</span>
+                </div>
+              </div>
+            `;
+          })
+          .join("")
+      : `<div class="no-match-note">No subclaim mapping found.</div>`;
+
+    const superBlocks = (Array.isArray(matches) ? matches : []).length
+      ? matches
+          .map((m) => {
+            const conf = clamp01(m.confidence);
+            return `
+              <div class="claim-block claim-block--super">
+                <div>
+                  <span class="claim-type-tag claim-type-tag--super">Superclaim <span class="claim-id-badge">${escapeHtml(
+                    m.superclaimId || ""
+                  )}</span></span>
+                </div>
+                <div class="claim-text">${escapeHtml(m.superclaimText || "")}</div>
+                ${formatTopicChipHtml(m.subclaimId)}
+                <div class="sim-row" style="margin-top:8px">
+                  <span class="sim-label">Confidence</span>
+                  <div class="sim-bar-wrap"><div class="sim-bar-fill sim-bar-fill--amber" style="width:${Math.round(
+                    conf * 100
+                  )}%"></div></div>
+                  <span class="sim-val">${conf.toFixed(2)}</span>
+                </div>
+              </div>
+            `;
+          })
+          .join("")
+      : `<div class="no-match-note">No superclaim mapping found.</div>`;
+
+    card.innerHTML = `
+      <div class="para-card-header">
+        <div class="para-num">${idx + 1}</div>
+        <div>
+          <div class="para-card-title">${escapeHtml(title)}</div>
+          <div class="para-card-sub">Maps below apply only to this paragraph.</div>
+        </div>
+      </div>
+      <div class="para-grid">
+        <div class="para-col">
+          <div class="col-label">Paragraph Text</div>
+          <div class="para-text-block">${paraHtml}</div>
+        </div>
+        <div class="para-col">
+          <div class="col-label">Subclaim(s)</div>
+          ${subBlocks}
+        </div>
+        <div class="para-col">
+          <div class="col-label">Superclaim(s)</div>
+          ${superBlocks}
+        </div>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+}
+
 function renderResults(paragraphsWithMatches) {
+  if (isRedesignedUi()) {
+    renderResultsRedesigned(paragraphsWithMatches);
+    return;
+  }
   const container = document.getElementById("results-container");
   container.innerHTML = "";
 
@@ -1106,6 +1251,182 @@ function formatProposalBodyHtml(p) {
 }
 
 async function refreshPendingProposals() {
+  if (isRedesignedUi()) {
+    const list = document.getElementById("proposals-list");
+    if (!list) return;
+    list.innerHTML = `<div class="empty-note">Loading pending proposals…</div>`;
+    let proposals = [];
+    try {
+      const raw = await getJson("/api/proposals?status=pending");
+      if (!Array.isArray(raw)) {
+        throw new Error(
+          raw == null
+            ? "Empty response from /api/proposals (expected a JSON array)."
+            : `Invalid response from /api/proposals: expected an array, got ${typeof raw}.`
+        );
+      }
+      proposals = raw;
+    } catch (e) {
+      list.innerHTML = `<div class="empty-note">Unable to load proposals: ${escapeHtml(
+        e.message || String(e)
+      )}</div>`;
+      setTextIfPresent("stat-proposals", 0);
+      return;
+    }
+
+    setTextIfPresent("stat-proposals", proposals.length);
+
+    if (proposals.length === 0) {
+      list.innerHTML = `<div class="empty-note">No pending proposals yet.</div>`;
+      return;
+    }
+
+    const byId = new Map();
+    proposals.forEach((p) => {
+      if (p && p.id) byId.set(String(p.id), p);
+    });
+
+    list.innerHTML = "";
+    proposals.forEach((p) => {
+      const card = document.createElement("div");
+      card.className = "proposal-card";
+
+      const type = formatProposalTitle(p);
+      const icon =
+        p.type === "merge_superclaims" || p.type === "merge_subclaims"
+          ? "⇄"
+          : p.type === "link_subclaim_to_superclaim"
+            ? "↪"
+            : p.type === "new_superclaim"
+              ? "+"
+              : "•";
+
+      const payload = p.payload || {};
+      const cos =
+        typeof payload.pairCosine === "number" && Number.isFinite(payload.pairCosine)
+          ? payload.pairCosine
+          : null;
+
+      const mergeDetail =
+        p.type === "merge_superclaims" || p.type === "merge_subclaims"
+          ? (() => {
+              const keepId =
+                p.type === "merge_superclaims"
+                  ? payload.canonicalSuperclaimId
+                  : payload.canonicalSubclaimId;
+              const removeId =
+                p.type === "merge_superclaims"
+                  ? payload.removeSuperclaimId
+                  : payload.removeSubclaimId;
+              const keepText =
+                p.type === "merge_superclaims"
+                  ? payload.canonicalSuperclaimText
+                  : payload.canonicalSubclaimText;
+              const removeText =
+                p.type === "merge_superclaims"
+                  ? payload.removeSuperclaimText
+                  : payload.removeSubclaimText;
+              return `
+                <div class="merge-detail">
+                  <div class="merge-item">
+                    <div class="merge-item-label">Keep (canonical)</div>
+                    <div class="merge-item-id">${escapeHtml(keepId || "")}</div>
+                    <div class="merge-item-text">${escapeHtml(
+                      String(keepText || "").trim() || "(no text in payload)"
+                    )}</div>
+                  </div>
+                  <div class="merge-item">
+                    <div class="merge-item-label">Merge away</div>
+                    <div class="merge-item-id">${escapeHtml(removeId || "")}</div>
+                    <div class="merge-item-text">${escapeHtml(
+                      String(removeText || "").trim() || "(no text in payload)"
+                    )}</div>
+                  </div>
+                </div>
+              `;
+            })()
+          : "";
+
+      const scoreRow =
+        cos != null
+          ? `
+            <div class="score-row">
+              <span class="sim-label">TF‑IDF Cosine Similarity</span>
+              <div class="sim-bar-wrap" style="flex:1">
+                <div class="sim-bar-fill sim-bar-fill--amber" style="width:${Math.round(
+                  clamp01(cos) * 100
+                )}%"></div>
+              </div>
+              <span class="score-val">${cos.toFixed(3)}</span>
+            </div>
+          `
+          : "";
+
+      const rationale = String(p.rationale || "").trim();
+      const bodyLine = escapeHtml(String(p.paragraph || "").trim());
+
+      card.innerHTML = `
+        <div class="proposal-header">
+          <div class="proposal-icon">${escapeHtml(icon)}</div>
+          <div>
+            <div class="proposal-type">${escapeHtml(type)}</div>
+            <div class="proposal-id">${escapeHtml(p.id || "")}</div>
+          </div>
+        </div>
+        ${bodyLine ? `<div class="proposal-body">${bodyLine}</div>` : ""}
+        ${mergeDetail}
+        ${scoreRow}
+        ${rationale ? `<div style="font-size:12px;color:var(--text-3);margin-bottom:12px">${escapeHtml(rationale)}</div>` : ""}
+        <div class="proposal-actions">
+          <button class="btn-approve" type="button" data-action="approve" data-id="${escapeHtmlAttr(
+            p.id || ""
+          )}">✓ Approve</button>
+          <button class="btn-reject" type="button" data-action="reject" data-id="${escapeHtmlAttr(
+            p.id || ""
+          )}">✕ Reject</button>
+          <button class="btn-apply" type="button" data-action="apply" data-id="${escapeHtmlAttr(
+            p.id || ""
+          )}">Apply to CSV →</button>
+        </div>
+      `;
+
+      list.appendChild(card);
+    });
+
+    list.querySelectorAll("button[data-action]").forEach((btn) => {
+      btn.addEventListener("click", async (ev) => {
+        const el = ev.currentTarget;
+        const action = el.getAttribute("data-action");
+        const id = el.getAttribute("data-id");
+        if (!id || !action) return;
+
+        const card = el.closest(".proposal-card");
+        const cardButtons = card ? Array.from(card.querySelectorAll("button[data-action]")) : [el];
+        cardButtons.forEach((b) => (b.disabled = true));
+        try {
+          const reviewer = requireReviewerName();
+          if (!reviewer) {
+            cardButtons.forEach((b) => (b.disabled = false));
+            return;
+          }
+          if (action === "apply") {
+            await postJson(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+              reviewer_name: reviewer,
+            });
+          }
+          await postJson(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
+            reviewer_name: reviewer,
+          });
+          await refreshPendingProposals();
+        } catch (e) {
+          cardButtons.forEach((b) => (b.disabled = false));
+          alert(`Proposal ${action} failed: ${e.message || String(e)}`);
+        }
+      });
+    });
+    return;
+  }
+
   const container = document.getElementById("proposals-container");
   if (!container) return;
 
@@ -1280,7 +1601,7 @@ async function handleAnalyzeClick() {
 
 window.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("analyze-btn");
-  btn.addEventListener("click", handleAnalyzeClick);
+  if (btn) btn.addEventListener("click", handleAnalyzeClick);
 
   const reviewerEl = document.getElementById("reviewer-name");
   if (reviewerEl) {

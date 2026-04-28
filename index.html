@@ -1,73 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Native Ads Claim Mapping</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Optional: absolute API origin when this page is not served with a same-origin /api/* proxy (see vercel.json).
-         Leave empty to use same-origin /api first, then localhost:8001 when on loopback. -->
-    <meta name="claims-api-base" content="" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <main class="app">
-      <header class="app-header">
-        <h1>Paragraph-Level Claim Mapping</h1>
-        <p>Paste an article below.</p>
-      </header>
-
-      <section class="input-section">
-        <label for="article-input" class="field-label">Article text</label>
-        <textarea
-          id="article-input"
-          class="text-input"
-          rows="10"
-          placeholder="Paste article text here… Separate paragraphs with a blank line."
-        ></textarea>
-
-        <div class="controls">
-          <button id="analyze-btn" class="primary-btn">Analyze paragraphs</button>
-          <span id="status" class="status-text"></span>
-        </div>
-      </section>
-
-      <section class="results-section">
-        <h2>Paragraph ↔ Claim mappings</h2>
-        <div id="results-container" class="results-container">
-          <p class="placeholder">
-            No results yet. Paste an article and click “Analyze paragraphs”.
-          </p>
-        </div>
-      </section>
-
-      <section class="results-section">
-        <h2>Pending taxonomy proposals (human approval)</h2>
-        <div class="reviewer-row">
-          <label for="reviewer-name" class="field-label">Reviewer name</label>
-          <input
-            id="reviewer-name"
-            class="text-input reviewer-input"
-            type="text"
-            maxlength="120"
-            placeholder="Your name (stored locally in this browser)"
-            autocomplete="name"
-          />
-        </div>
-        <div id="proposals-container" class="results-container">
-          <p class="placeholder">No pending proposals yet.</p>
-        </div>
-      </section>
-    </main>
-
-    <script src="script.js"></script>
-  </body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CLAIMS 2.0 — Redesigned</title>
+<!-- Optional: absolute API origin when this page is not served with a same-origin /api/* proxy. Leave empty to try same-origin first, then http://localhost:8001 on localhost. -->
+<meta name="claims-api-base" content="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -655,181 +593,49 @@
     <div class="stats-row">
       <div class="stat-chip">
         <span class="stat-dot" style="background:#3b82f6"></span>
-        <strong>20</strong> paragraphs
+        <strong id="stat-paragraphs">0</strong> paragraphs
       </div>
       <div class="stat-chip">
         <span class="stat-dot" style="background:var(--teal)"></span>
-        <strong>31</strong> subclaims
+        <strong id="stat-subclaims">0</strong> subclaims
       </div>
       <div class="stat-chip">
         <span class="stat-dot" style="background:var(--amber)"></span>
-        <strong>18</strong> superclaims
+        <strong id="stat-superclaims">0</strong> superclaims
       </div>
       <div class="stat-chip">
         <span class="stat-dot" style="background:#a855f7"></span>
-        <strong>3</strong> pending proposals
+        <strong id="stat-proposals">0</strong> pending proposals
       </div>
     </div>
   </div>
 
   <!-- INPUT -->
   <div class="input-section">
-    <label class="field-label">Article Text</label>
-    <textarea class="text-input" placeholder="Paste article text here… Separate paragraphs with a blank line."></textarea>
+    <label class="field-label" for="article-input">Article Text</label>
+    <textarea id="article-input" class="text-input" placeholder="Paste article text here… Separate paragraphs with a blank line."></textarea>
     <div class="controls">
-      <button class="btn-primary">Analyze Paragraphs</button>
-      <span class="status">20 paragraphs loaded</span>
+      <button id="analyze-btn" class="btn-primary" type="button">Analyze Paragraphs</button>
+      <span id="status" class="status"></span>
     </div>
   </div>
 
   <!-- RESULTS -->
   <div class="section-title">Paragraph ↔ Claim Mappings</div>
-
-  <!-- Card 1 -->
-  <div class="para-card">
-    <div class="para-card-header">
-      <div class="para-num">1</div>
-      <div>
-        <div class="para-card-title">Paragraph 1 of 20</div>
-        <div class="para-card-sub">Maps below apply only to this paragraph.</div>
-      </div>
-    </div>
-    <div class="para-grid">
-      <div class="para-col">
-        <div class="col-label">Paragraph Text</div>
-        <div class="para-text-block">
-          Amid the climate crisis, the private and the public sectors are seeking strategies for achieving net-zero emissions. But their road maps are often different, and it's not clear who should be leading the way.
-        </div>
-      </div>
-      <div class="para-col">
-        <div class="col-label">Subclaim(s)</div>
-        <div class="claim-block claim-block--sub">
-          <div>
-            <span class="claim-type-tag claim-type-tag--sub">Subclaim <span class="claim-id-badge">NC_89</span></span>
-          </div>
-          <div class="claim-text">CCS is essential to achieving net-zero emissions targets</div>
-          <div class="sim-row">
-            <span class="sim-label">Similarity</span>
-            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:2%"></div></div>
-            <span class="sim-val">0.02</span>
-          </div>
-        </div>
-      </div>
-      <div class="para-col">
-        <div class="col-label">Superclaim(s)</div>
-        <div class="claim-block claim-block--super">
-          <div>
-            <span class="claim-type-tag claim-type-tag--super">Superclaim <span class="claim-id-badge">SC_25</span></span>
-          </div>
-          <div class="claim-text">Limits of alternative zero-emission aviation fuels due to technical challenges</div>
-          <div class="topic-chip topic-chip--none">⚠ Unique Topic (−1)</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Card 2 -->
-  <div class="para-card">
-    <div class="para-card-header">
-      <div class="para-num">2</div>
-      <div>
-        <div class="para-card-title">Paragraph 2 of 20</div>
-        <div class="para-card-sub">Maps below apply only to this paragraph.</div>
-      </div>
-    </div>
-    <div class="para-grid">
-      <div class="para-col">
-        <div class="col-label">Paragraph Text</div>
-        <div class="para-text-block">
-          For this custom research, Atlantic Insights, the marketing research team at The Atlantic, partnered with Southern Company to survey 318 public- and private-sector officials, from CEOs to policymakers and elected representatives.
-        </div>
-      </div>
-      <div class="para-col">
-        <div class="col-label">Subclaim(s)</div>
-        <div class="claim-block claim-block--sub">
-          <div>
-            <span class="claim-type-tag claim-type-tag--sub">Subclaim <span class="claim-id-badge">NC_175</span></span>
-          </div>
-          <div class="claim-text">Establishment of specialized research centers to promote fossil fuel technology and an ambiguous 'energy transition'</div>
-          <div class="sim-row">
-            <span class="sim-label">Similarity</span>
-            <div class="sim-bar-wrap"><div class="sim-bar-fill" style="width:54%"></div></div>
-            <span class="sim-val">0.54</span>
-          </div>
-        </div>
-      </div>
-      <div class="para-col">
-        <div class="col-label">Superclaim(s)</div>
-        <div class="claim-block claim-block--super">
-          <div>
-            <span class="claim-type-tag claim-type-tag--super">Superclaim <span class="claim-id-badge">SC_2</span></span>
-          </div>
-          <div class="claim-text">Oil is important for the energy transition</div>
-          <div class="topic-chip topic-chip--none">⚠ No BERTopic row</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="results-container"></div>
 
   <!-- PROPOSALS -->
   <div class="section-title" style="margin-top:28px">Pending Taxonomy Proposals <span style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.35);color:#c4b5fd;font-size:10px;padding:2px 8px;border-radius:999px;letter-spacing:0.06em;font-weight:600;margin-left:4px">Human Approval</span></div>
 
-  <div class="proposals-container">
+  <div class="proposals-container" id="proposals-container">
     <div class="reviewer-row">
-      <label class="field-label" style="margin:0;white-space:nowrap">Reviewer Name</label>
-      <input type="text" class="reviewer-input" placeholder="Your name (stored locally)" />
+      <label class="field-label" for="reviewer-name" style="margin:0;white-space:nowrap">Reviewer Name</label>
+      <input id="reviewer-name" type="text" class="reviewer-input" placeholder="Your name (stored locally)" maxlength="120" autocomplete="name" />
     </div>
-
-    <!-- Proposal card -->
-    <div class="proposal-card">
-      <div class="proposal-header">
-        <div class="proposal-icon">⇄</div>
-        <div>
-          <div class="proposal-type">Merge Superclaims</div>
-          <div class="proposal-id">prop_ee21aba40d</div>
-        </div>
-      </div>
-
-      <div class="proposal-body">
-        Maximizing upsides — Although ending routine flaring is a big step forward, the Moho Nord project strove to develop other positive environmental impacts.
-      </div>
-
-      <div class="merge-detail">
-        <div class="merge-item">
-          <div class="merge-item-label">Keep (canonical)</div>
-          <div class="merge-item-id">SC_39</div>
-          <div class="merge-item-text">Biomonitoring and advanced environmental monitoring as green credentials</div>
-        </div>
-        <div class="merge-item">
-          <div class="merge-item-label">Merge away</div>
-          <div class="merge-item-id">SC_9</div>
-          <div class="merge-item-text">Biomonitoring and advanced environmental monitoring as green credentials</div>
-        </div>
-      </div>
-
-      <div class="score-row">
-        <span class="sim-label">TF-IDF Cosine Similarity</span>
-        <div class="sim-bar-wrap" style="flex:1">
-          <div class="sim-bar-fill sim-bar-fill--amber" style="width:100%"></div>
-        </div>
-        <span class="score-val">1.000</span>
-      </div>
-      <div style="font-size:12px;color:var(--text-3);margin-bottom:12px">
-        High TF-IDF cosine similarity between superclaim texts (1.00) — consider merging superclaims.
-      </div>
-
-      <div class="proposal-actions">
-        <button class="btn-approve">✓ Approve</button>
-        <button class="btn-reject">✕ Reject</button>
-        <button class="btn-apply">Apply to CSV →</button>
-      </div>
-    </div>
-
-    <div class="empty-note">
-      No further proposals. Run the taxonomy diagnosis pipeline to generate new proposals.
-    </div>
+    <div id="proposals-list"></div>
   </div>
 
-</div>
+  </div>
+<script src="script.js"></script>
 </body>
 </html>
