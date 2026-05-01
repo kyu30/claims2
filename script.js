@@ -606,7 +606,13 @@ function clamp01(x) {
 function pickConfidence(m) {
   if (!m || typeof m !== "object") return { value: null, label: "" };
   const llm = typeof m.confidence === "number" && Number.isFinite(m.confidence) ? clamp01(m.confidence) : null;
-  if (llm != null) return { value: llm, label: "Confidence" };
+  if (llm != null) {
+    const src = String(m.confidenceSource || "").trim();
+    if (src === "llm" || src === "llm_prompt") return { value: llm, label: "Confidence (LLM)" };
+    if (src === "tfidf_fallback") return { value: llm, label: "Confidence (TF‑IDF fallback)" };
+    if (src === "tfidf_no_openai_key") return { value: llm, label: "Confidence (TF‑IDF; no OpenAI key)" };
+    return { value: llm, label: "Confidence" };
+  }
   const heuristic =
     typeof m.mappingConfidence === "number" && Number.isFinite(m.mappingConfidence)
       ? clamp01(m.mappingConfidence)
