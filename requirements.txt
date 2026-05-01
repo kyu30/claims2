@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+openai
+python-dotenv
+numpy
+scikit-learn
+psycopg[binary]
+# Optional: MiniLM embeddings + BERTopic (recommended on Python 3.10+ / environments with MSVC if needed)
+# sentence-transformers
+# bertopic

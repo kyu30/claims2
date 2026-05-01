@@ -1,0 +1,32 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Debug repo contents
+        run: |
+          pwd
+          ls -la
+          echo "----- README.md -----"
+          sed -n '1,20p' README.md
+
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git remote add space https://oauth2:${HF_TOKEN}@huggingface.co/spaces/spark-ds549/Claims2
+          git push space HEAD:main --force

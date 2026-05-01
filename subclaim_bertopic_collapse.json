@@ -1,0 +1,896 @@
+{
+  "generated_at": "2026-04-23T05:10:32.249147+00:00",
+  "claims_bundle_version": "d0029c4b709f8455",
+  "claims_source_sha256": "8cef59b5ecda4627cfdd1e8796cc4351e3c69d443eba4dce52767e2d06fc986a",
+  "data_files_sha256": [
+    "8cef59b5ecda4627cfdd1e8796cc4351e3c69d443eba4dce52767e2d06fc986a",
+    "c36e09ca0cd28f4244cc860b7e27206fe38d4de0dd8559f32ea5751ad03cba63",
+    "d923cb594ec2b51bb079b7a657637fdb4500f301dbcd81978a2a2ad2a147d493",
+    "36ce5904f2c45002b3e91608f2e68c578a7d27253594e8fce6243fed1144cac7"
+  ],
+  "claims_version": null,
+  "cluster_backend": "sklearn_dbscan",
+  "embedding_backend": "tfidf_svd",
+  "embedding_model": null,
+  "min_topic_size": 2,
+  "dbscan_eps": 0.32,
+  "claims_source": "greenwashing_claim_history.json",
+  "subclaims": {
+    "NC_1": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.6556,
+      "superclaim_id": "SC_1"
+    },
+    "NC_6": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.5771,
+      "superclaim_id": "SC_3"
+    },
+    "NC_7": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.4796,
+      "superclaim_id": "SC_3"
+    },
+    "NC_8": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.5956,
+      "superclaim_id": "SC_3"
+    },
+    "NC_12": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.48,
+      "superclaim_id": "SC_12"
+    },
+    "NC_14": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_1"
+    },
+    "NC_18": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_8"
+    },
+    "NC_17": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1253,
+      "superclaim_id": "SC_7"
+    },
+    "NC_19": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0428,
+      "superclaim_id": "SC_9"
+    },
+    "NC_21": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_3"
+    },
+    "NC_20": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0371,
+      "superclaim_id": "SC_3"
+    },
+    "NC_22": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_3"
+    },
+    "NC_23": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_11"
+    },
+    "NC_24": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_1"
+    },
+    "NC_25": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0783,
+      "superclaim_id": "SC_1"
+    },
+    "NC_27": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_1"
+    },
+    "NC_26": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_1"
+    },
+    "NC_28": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_1"
+    },
+    "NC_30": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.4526,
+      "superclaim_id": "SC_12"
+    },
+    "NC_31": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_1"
+    },
+    "NC_29": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0803,
+      "superclaim_id": "SC_1"
+    },
+    "NC_33": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0426,
+      "superclaim_id": "SC_13"
+    },
+    "NC_32": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1294,
+      "superclaim_id": "SC_13"
+    },
+    "NC_34": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0489,
+      "superclaim_id": "SC_13"
+    },
+    "NC_35": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.137,
+      "superclaim_id": "SC_13"
+    },
+    "NC_36": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1289,
+      "superclaim_id": "SC_13"
+    },
+    "NC_37": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0537,
+      "superclaim_id": "SC_13"
+    },
+    "NC_38": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1622,
+      "superclaim_id": "SC_13"
+    },
+    "NC_39": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1042,
+      "superclaim_id": "SC_14"
+    },
+    "NC_40": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_15"
+    },
+    "NC_42": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_15"
+    },
+    "NC_41": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_15"
+    },
+    "NC_43": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_16"
+    },
+    "NC_45": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.2207,
+      "superclaim_id": "SC_17"
+    },
+    "NC_44": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_16"
+    },
+    "NC_46": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_15"
+    },
+    "NC_47": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0198,
+      "superclaim_id": "SC_18"
+    },
+    "NC_48": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0531,
+      "superclaim_id": "SC_19"
+    },
+    "NC_49": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0586,
+      "superclaim_id": "SC_19"
+    },
+    "NC_50": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.044,
+      "superclaim_id": "SC_20"
+    },
+    "NC_51": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_5"
+    },
+    "NC_52": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_5"
+    },
+    "NC_53": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_3"
+    },
+    "NC_54": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_5"
+    },
+    "NC_55": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_21"
+    },
+    "NC_56": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_21"
+    },
+    "NC_57": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0549,
+      "superclaim_id": "SC_21"
+    },
+    "NC_58": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_5"
+    },
+    "NC_59": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.087,
+      "superclaim_id": "SC_2"
+    },
+    "NC_60": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_2"
+    },
+    "NC_62": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0765,
+      "superclaim_id": "SC_22"
+    },
+    "NC_61": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0854,
+      "superclaim_id": "SC_21"
+    },
+    "NC_63": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0482,
+      "superclaim_id": "SC_23"
+    },
+    "NC_64": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.4699,
+      "superclaim_id": "SC_24"
+    },
+    "NC_66": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_25"
+    },
+    "NC_65": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.2494,
+      "superclaim_id": "SC_24"
+    },
+    "NC_68": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1326,
+      "superclaim_id": "SC_26"
+    },
+    "NC_67": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_5"
+    },
+    "NC_69": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.2136,
+      "superclaim_id": "SC_24"
+    },
+    "NC_71": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0355,
+      "superclaim_id": "SC_27"
+    },
+    "NC_70": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_24"
+    },
+    "NC_73": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1089,
+      "superclaim_id": "SC_14"
+    },
+    "NC_72": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0812,
+      "superclaim_id": "SC_14"
+    },
+    "NC_74": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_14"
+    },
+    "NC_77": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_6"
+    },
+    "NC_75": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_6"
+    },
+    "NC_76": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_6"
+    },
+    "NC_78": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0451,
+      "superclaim_id": "SC_28"
+    },
+    "NC_79": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.3814,
+      "superclaim_id": "SC_29"
+    },
+    "NC_80": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_28"
+    },
+    "NC_81": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.5105,
+      "superclaim_id": "SC_3"
+    },
+    "NC_82": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_31"
+    },
+    "NC_83": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_31"
+    },
+    "NC_84": {
+      "topic_id": 0,
+      "collapse_flag": true,
+      "collapse_with": [
+        "NC_85"
+      ],
+      "hierarchy_confidence": 0.0603,
+      "superclaim_id": "SC_32"
+    },
+    "NC_86": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_34"
+    },
+    "NC_85": {
+      "topic_id": 0,
+      "collapse_flag": true,
+      "collapse_with": [
+        "NC_84"
+      ],
+      "hierarchy_confidence": 0.0627,
+      "superclaim_id": "SC_33"
+    },
+    "NC_87": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_35"
+    },
+    "NC_89": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0202,
+      "superclaim_id": "SC_36"
+    },
+    "NC_88": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0319,
+      "superclaim_id": "SC_17"
+    },
+    "NC_90": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.4037,
+      "superclaim_id": "SC_36"
+    },
+    "NC_91": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.2878,
+      "superclaim_id": "SC_37"
+    },
+    "NC_94": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1538,
+      "superclaim_id": "SC_37"
+    },
+    "NC_92": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_37"
+    },
+    "NC_93": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0945,
+      "superclaim_id": "SC_37"
+    },
+    "NC_96": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_37"
+    },
+    "NC_95": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_37"
+    },
+    "NC_97": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.247,
+      "superclaim_id": "SC_37"
+    },
+    "NC_99": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0852,
+      "superclaim_id": "SC_38"
+    },
+    "NC_100": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0628,
+      "superclaim_id": "SC_38"
+    },
+    "NC_98": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0623,
+      "superclaim_id": "SC_38"
+    },
+    "NC_101": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1012,
+      "superclaim_id": "SC_39"
+    },
+    "NC_102": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0341,
+      "superclaim_id": "SC_39"
+    },
+    "NC_103": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1254,
+      "superclaim_id": "SC_40"
+    },
+    "NC_104": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1924,
+      "superclaim_id": "SC_40"
+    },
+    "NC_106": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_39"
+    },
+    "NC_105": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_40"
+    },
+    "NC_107": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1935,
+      "superclaim_id": "SC_39"
+    },
+    "NC_108": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_39"
+    },
+    "NC_111": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0306,
+      "superclaim_id": "SC_42"
+    },
+    "NC_109": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.03,
+      "superclaim_id": "SC_39"
+    },
+    "NC_110": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0971,
+      "superclaim_id": "SC_41"
+    },
+    "NC_112": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0246,
+      "superclaim_id": "SC_42"
+    },
+    "NC_113": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0239,
+      "superclaim_id": "SC_43"
+    },
+    "NC_114": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.2261,
+      "superclaim_id": "SC_44"
+    },
+    "NC_115": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.4124,
+      "superclaim_id": "SC_45"
+    },
+    "NC_116": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_45"
+    },
+    "NC_117": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_45"
+    },
+    "NC_118": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0646,
+      "superclaim_id": "SC_30"
+    },
+    "NC_119": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0401,
+      "superclaim_id": "SC_30"
+    },
+    "NC_120": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0549,
+      "superclaim_id": "SC_30"
+    },
+    "NC_123": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0816,
+      "superclaim_id": "SC_46"
+    },
+    "NC_122": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_46"
+    },
+    "NC_121": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0569,
+      "superclaim_id": "SC_46"
+    },
+    "NC_125": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0482,
+      "superclaim_id": "SC_46"
+    },
+    "NC_124": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.04,
+      "superclaim_id": "SC_46"
+    },
+    "NC_126": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1845,
+      "superclaim_id": "SC_46"
+    },
+    "NC_128": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_46"
+    },
+    "NC_127": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0,
+      "superclaim_id": "SC_46"
+    },
+    "NC_129": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0555,
+      "superclaim_id": "SC_46"
+    },
+    "NC_131": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.0498,
+      "superclaim_id": "SC_3"
+    },
+    "NC_130": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.4285,
+      "superclaim_id": "SC_46"
+    },
+    "NC_133": {
+      "topic_id": 1,
+      "collapse_flag": true,
+      "collapse_with": [
+        "NC_132"
+      ],
+      "hierarchy_confidence": 0.1818,
+      "superclaim_id": "SC_49"
+    },
+    "NC_134": {
+      "topic_id": -1,
+      "collapse_flag": false,
+      "collapse_with": [],
+      "hierarchy_confidence": 0.1955,
+      "superclaim_id": "SC_49"
+    },
+    "NC_132": {
+      "topic_id": 1,
+      "collapse_flag": true,
+      "collapse_with": [
+        "NC_133"
+      ],
+      "hierarchy_confidence": 0.2451,
+      "superclaim_id": "SC_48"
+    }
+  }
+}
