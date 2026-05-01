@@ -691,6 +691,7 @@ class MatchRow(BaseModel):
     superclaimId: str
     superclaimText: str
     confidence: float = Field(ge=0.0, le=1.0)
+    confidenceSource: str = ""
     reason: str = ""
 
 
@@ -1115,15 +1116,18 @@ def _llm_suggest_mapping(
             conf = float(score.get("confidence") or 0.0)
             verdict = str(score.get("verdict") or "uncertain")
             reason = str(score.get("reason") or "").strip()
+            confidence_source = "llm"
         except Exception:
             conf = float(max(0.0, min(1.0, min(float(sub_sim), float(super_sim)))))
             verdict = "uncertain"
             reason = "LLM confidence failed; using TF‑IDF similarity as fallback."
+            confidence_source = "tfidf_fallback"
     else:
         # Without OpenAI, use TF‑IDF cosine so /api/analyze still succeeds and can persist proposals.
         conf = float(max(0.0, min(1.0, min(float(sub_sim), float(super_sim)))))
         verdict = "uncertain"
         reason = "TF‑IDF ranking only (set OPENAI_API_KEY for LLM scoring)."
+        confidence_source = "tfidf_no_openai_key"
 
     # When we don't have OpenAI configured, still return a best-guess mapping so the UI doesn't
     # show "No mapping found" for every paragraph.
@@ -1136,6 +1140,7 @@ def _llm_suggest_mapping(
                     superclaimId=best_super_id,
                     superclaimText=best_super_text,
                     confidence=conf,
+                    confidenceSource=confidence_source,
                     reason=reason,
                 )
             ],
@@ -1151,6 +1156,7 @@ def _llm_suggest_mapping(
                     superclaimId=best_super_id,
                     superclaimText=best_super_text,
                     confidence=conf,
+                    confidenceSource=confidence_source,
                     reason=reason,
                 )
             ],
@@ -1301,6 +1307,7 @@ def _llm_prompt_extract_or_map_claims(
                         superclaimId=super_id,
                         superclaimText=super_text,
                         confidence=0.6,
+                        confidenceSource="llm_prompt",
                         reason=rationale or "LLM mapped paragraph to existing taxonomy claim.",
                     )
                 )
