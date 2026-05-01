@@ -50,6 +50,7 @@ def score_subclaim_to_superclaim_confidence(
             "verdict": "uncertain",
             "confidence": 0.0,
             "reason": "OPENAI_API_KEY not set; LLM confidence scoring skipped.",
+            "model": None,
         }
 
     model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
@@ -101,6 +102,7 @@ Return ONLY valid JSON, no markdown, with this exact shape:
             "verdict": "uncertain",
             "confidence": 0.0,
             "reason": "LLM confidence call failed; treating as uncertain.",
+            "model": model,
         }
 
     verdict = data.get("verdict")
@@ -110,5 +112,5 @@ Return ONLY valid JSON, no markdown, with this exact shape:
     confidence = _coerce_confidence(data.get("confidence"))
     reason = str(data.get("reason") or "").strip() or "No reason provided."
 
-    return {"verdict": verdict, "confidence": confidence, "reason": reason}
+    return {"verdict": verdict, "confidence": confidence, "reason": reason, "model": model}
 
